@@ -1,0 +1,398 @@
+% =====================================================================
+%  Proyecto Aprendizaje por Refuerzo - Entrega 1
+%  Definición de estados, acciones y función de recompensa R(s,a,s')
+%  Compilar con pdfLaTeX:  latexmk -pdf entrega1_definicion_mdp.tex
+% =====================================================================
+\documentclass[11pt,letterpaper]{article}
+
+% ---------- Idioma y codificación ----------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{babel}
+\babelprovide[import,main]{spanish}   % funciona aunque no esté instalado spanish.ldf
+\usepackage{lmodern}
+
+% ---------- Página ----------
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+% ---------- Matemáticas y tablas ----------
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage[table]{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage[colorlinks=true,linkcolor=azul,urlcolor=azul]{hyperref}
+
+% ---------- Colores y estilo ----------
+\definecolor{azul}{HTML}{1F4E79}
+\definecolor{gris}{HTML}{F2F4F7}
+\titleformat{\section}{\Large\bfseries\color{azul}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{azul}}{\thesubsection}{0.6em}{}
+\captionsetup{font=small,labelfont=bf}
+\setlist{itemsep=2pt,topsep=4pt}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.25}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small Aprendizaje por Refuerzo -- Proyecto, Entrega 1}
+\rhead{\small Consolidación de picking en un CD}
+\cfoot{\small \thepage}
+
+% ---------- Macros ----------
+\newcommand{\LOTE}[1]{\mathsf{LOTE}_{#1}}
+\newcommand{\URG}{\mathsf{URGENTE}}
+\newcommand{\ESP}{\mathsf{ESPERAR}}
+\newcommand{\sfin}{s_{\mathrm{fin}}}
+\newcommand{\umax}{u_{\max}}
+
+% =====================================================================
+\begin{document}
+
+\begin{center}
+  {\small Universidad de los Andes \textperiodcentered{} Maestría en Inteligencia Artificial}\\[2pt]
+  {\small Aprendizaje por Refuerzo \textperiodcentered{} Prof. Nicolás Cardozo}\\[10pt]
+  {\LARGE\bfseries\color{azul} Agente de RL para la consolidación de órdenes\\[2pt] de picking en un centro de distribución}\\[8pt]
+  {\large Entrega 1: estados, acciones y función de recompensa}\\[8pt]
+  Miguel Ángel Muñoz Layton \quad\textperiodcentered\quad [Nombre del compañero]\\[2pt]
+  {\small Noviembre de 2026}
+\end{center}
+
+\vspace{4pt}
+\hrule
+\vspace{8pt}
+
+% =====================================================================
+\section{Descripción de la aplicación}
+
+Un agente de aprendizaje por refuerzo decide, cada vez que un operario queda libre,
+qué trabajo de picking liberar en un centro de distribución (CD): un lote consolidado de
+una zona de racks, una orden urgente individual, o esperar a que lleguen más órdenes.
+El objetivo es reducir los recorridos a los racks agrupando ítems repetidos entre órdenes,
+sin incumplir el deadline de ninguna orden.
+
+\textbf{El problema.} A lo largo del turno llegan órdenes de compra. Cada orden tiene líneas
+(SKU y cantidad), cada SKU tiene una ubicación fija en un rack y cada orden tiene un deadline
+(hora de corte del transportista). Si cada orden se recoge por separado y 5 órdenes piden el
+mismo SKU, un operario va 5 veces a la misma ubicación. El agente agrupa esas líneas para hacer
+una sola visita y recoger las 5 unidades.
+
+\textbf{La tensión que aprende el agente.} Esperar a que lleguen más órdenes aumenta la
+consolidación, pero consume holgura frente al deadline y deja operarios ociosos. Una regla fija
+no resuelve bien ese balance cuando la demanda, el WIP y la cantidad de operarios cambian durante
+el día; por eso se plantea como un problema de RL.
+
+\textbf{Supuestos del entorno.}
+\begin{itemize}
+  \item Los racks están organizados en 4 zonas, $Z=\{A,B,C,D\}$; cada zona es un grupo de pasillos contiguos.
+  \item Un episodio es un turno de 8 horas.
+  \item Cada operario lleva un carro con capacidad de $C_{\max}=20$ líneas.
+  \item El número de operarios puede variar en el turno (pausas, ausencias); el agente observa cuántos están libres.
+  \item Las órdenes llegan de forma estocástica; el agente no conoce las órdenes futuras.
+\end{itemize}
+
+\textbf{Lote consolidado.} Al liberar un lote en la zona $z$, el sistema toma las líneas pendientes
+de $z$ ordenadas por deadline más cercano, hasta 20 líneas, y las agrupa por ubicación: todas las
+unidades del mismo SKU se recogen en una sola visita. Después se separan por orden en una mesa de
+consolidación (\emph{put-wall}) antes del despacho.
+
+\textbf{Momentos de decisión.} Hay una decisión (a) cada vez que un operario queda libre y (b) cada
+$\Delta t = 2$ min mientras haya operarios libres sin trabajo. Cada acción asigna como máximo un
+operario; si quedan más operarios libres, se toma otra decisión de inmediato sin que avance el reloj.
+
+\subsection{Comportamiento deseado y no deseado del agente}
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{0.7cm}Lp{2.1cm}L@{}}
+\toprule
+\textbf{\#} & \textbf{Comportamiento} & \textbf{Tipo} & \textbf{Cómo lo controla la recompensa} \\
+\midrule
+D1 & Recoger en una sola visita un SKU que piden varias órdenes & Deseado & $\LOTE{z}$ paga más cuanto mayor es $c_z$ ($+1,+5,+10$) \\
+D2 & Atender primero las órdenes con holgura crítica ($\le 15$ min) & Deseado & Bono de urgencia $+8$; $-20$ por orden vencida \\
+D3 & Mantener ocupados a los operarios cuando hay trabajo & Deseado & $\ESP$ con operarios libres cuesta $-1$ o $-3$ \\
+D4 & Esperar brevemente para formar lotes más grandes si llegan muchas órdenes y hay holgura & Deseado & $\ESP$ da $+2$ si $\lambda=2$ y la consolidación aún es baja \\
+D5 & Mantener controlado el WIP de cada zona & Deseado & $-2$ por zona saturada ($w_z=3$) cuando avanza el reloj \\
+D6 & Despachar todas las órdenes antes del fin de turno & Deseado & $+3$ por orden a tiempo; $-30$ por orden pendiente al cierre \\
+\midrule
+N1 & Ir varias veces a la misma ubicación por órdenes distintas & No deseado & $\URG$ sin urgencia cuesta $-4$; un lote sin repetidos solo paga $+1$ \\
+N2 & Retener órdenes esperando consolidar hasta que vencen & No deseado & $-20$ por orden vencida, mayor que el mejor lote ($+18$) \\
+N3 & Dejar operarios ociosos con órdenes críticas pendientes & No deseado & $\ESP$ con una zona crítica cuesta $-10$ \\
+N4 & Olvidar zonas con poca coincidencia de SKU (inanición) & No deseado & Su urgencia $u_z$ sube y su lote llega a pagar $+9$ \\
+N5 & Atender una zona cómoda mientras otra tiene una orden crítica & No deseado & $-6$ extra a $\LOTE{z}$ si otra zona es crítica y $z$ no \\
+N6 & Asignar trabajo sin operarios libres o a una zona sin líneas & No deseado & Acción enmascarada; si se ejecuta, $-50$ \\
+\bottomrule
+\end{tabularx}
+\caption{Comportamientos del agente y el componente de recompensa que los incentiva o castiga.}
+\end{table}
+
+% =====================================================================
+\section{Conjunto de estados}
+
+El estado es un vector de 14 variables discretas: tres por zona (WIP, consolidación y urgencia),
+más los operarios libres y la tasa de llegada de órdenes.
+\[
+  s = (w_A, w_B, w_C, w_D,\; c_A, c_B, c_C, c_D,\; u_A, u_B, u_C, u_D,\; o,\; \lambda),
+  \qquad z \in Z = \{A,B,C,D\}.
+\]
+Para abreviar, en el resto del documento se escribe
+\[ s = (w_A,w_B,w_C,w_D \mid c_A,c_B,c_C,c_D \mid u_A,u_B,u_C,u_D \mid o,\lambda). \]
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{1cm}Lp{1.9cm}L@{}}
+\toprule
+\textbf{Var.} & \textbf{Significado} & \textbf{Dominio} & \textbf{Discretización} \\
+\midrule
+$w_z$ & WIP de la zona $z$: líneas pendientes aún no asignadas a un operario & $\{0,1,2,3\}$ &
+  0 = 0 líneas; 1 = 1--5; 2 = 6--15; 3 = 16 o más (zona saturada) \\
+$c_z$ & Potencial de consolidación: máximo número de órdenes pendientes que piden un mismo SKU en $z$ & $\{0,1,2\}$ &
+  0 = ningún SKU repetido; 1 = 2--4 órdenes comparten un SKU; 2 = 5 o más \\
+$u_z$ & Urgencia: holgura mínima entre las órdenes con líneas pendientes en $z$ (holgura = deadline $-$ hora actual $-$ tiempo estimado de recogida) & $\{0,1,2,3\}$ &
+  0 = zona sin líneas; 1 = más de 60 min; 2 = 15--60 min; 3 = 15 min o menos, incluye vencidas (crítica) \\
+$o$ & Operarios libres en el momento de la decisión & $\{0,1,2,3\}$ & 0, 1, 2; 3 = tres o más \\
+$\lambda$ & Órdenes llegadas en los últimos 15 min & $\{0,1,2\}$ & 0 = menos de 5; 1 = 5--15; 2 = más de 15 \\
+\bottomrule
+\end{tabularx}
+\caption{Variables del estado y sus dominios.}
+\end{table}
+
+\textbf{Restricción de consistencia.} Una zona sin WIP no tiene consolidación ni urgencia:
+\[
+  w_z = 0 \iff c_z = 0 \ \wedge\ u_z = 0 .
+\]
+Por tanto, cada zona tiene $1 + 3\cdot3\cdot3 = 28$ combinaciones válidas de $(w_z,c_z,u_z)$.
+
+\textbf{Estado terminal.} $\sfin$ representa el fin del turno (8 h). Ahí termina el episodio y no hay acciones.
+
+\textbf{Tamaño del espacio.}
+\[
+  |S| = 28^4 \cdot 4 \cdot 3 + 1 = 7\,375\,873 \text{ estados.}
+\]
+Es finito pero grande para una tabla $Q$ completa. Una primera versión tabular con 2 zonas
+tiene $28^2\cdot 12 + 1 = 9\,409$ estados.
+
+El estado abstrae la posición exacta de cada SKU y la identidad de cada orden; esa información
+la usa el simulador para armar los lotes y contar eventos, no el agente para decidir.
+
+\subsection{Clases de estados relevantes}
+
+Para definir las acciones y las recompensas basta distinguir las siguientes clases. Sea
+$Z^{+}(s) = \{z \in Z : w_z \ge 1\}$ el conjunto de zonas con trabajo y
+$\umax = \max_{z} u_z$.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{1cm}p{5.2cm}L@{}}
+\toprule
+\textbf{Clase} & \textbf{Condición} & \textbf{Interpretación} \\
+\midrule
+$S_0$ & $s = \sfin$ & Fin del turno \\
+$S_1$ & $o = 0$ & Todos los operarios ocupados \\
+$S_2$ & $o \ge 1$ y $Z^{+}(s)=\emptyset$ & Hay operarios libres pero no hay trabajo pendiente \\
+$S_3$ & $o \ge 1$, $Z^{+}(s)\neq\emptyset$, $\umax = 3$ & Hay al menos una orden crítica \\
+$S_4$ & $o \ge 1$, $Z^{+}(s)\neq\emptyset$, $\umax \le 2$ & Hay trabajo sin urgencia crítica \\
+\bottomrule
+\end{tabularx}
+\caption{Partición del espacio de estados usada en acciones y recompensas.}
+\end{table}
+
+% =====================================================================
+\section{Conjunto de acciones}
+
+El agente tiene 6 acciones: un lote consolidado por cada zona, recoger una orden urgente completa,
+o esperar.
+\[
+  A = \{\LOTE{A}, \LOTE{B}, \LOTE{C}, \LOTE{D}, \URG, \ESP\}.
+\]
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{2.4cm}Lp{4.2cm}@{}}
+\toprule
+\textbf{Acción} & \textbf{Qué hace} & \textbf{Aplicable si} \\
+\midrule
+$\LOTE{z}$, $z\in Z$ & Asigna un operario libre a un lote de la zona $z$: hasta 20 líneas por deadline más cercano, agrupadas por ubicación (una visita por SKU) & $o\ge 1$ y $w_z \ge 1$ \\
+$\URG$ & Asigna un operario libre a recoger completa la orden con menor holgura de todo el CD, en todas sus zonas, sin mezclarla con otras órdenes & $o\ge1$ y $Z^{+}(s)\neq\emptyset$ \\
+$\ESP$ & No asigna trabajo; el reloj avanza hasta el siguiente evento (máximo $\Delta t = 2$ min) y pueden llegar órdenes nuevas & Siempre, salvo en $\sfin$ \\
+\bottomrule
+\end{tabularx}
+\caption{Acciones del agente.}
+\end{table}
+
+\textbf{Acciones aplicables por estado.} Formalmente,
+\[
+A(s) =
+\begin{cases}
+  \emptyset & s \in S_0 \\[2pt]
+  \{\ESP\} & s \in S_1 \cup S_2 \\[2pt]
+  \{\LOTE{z} : z \in Z^{+}(s)\} \cup \{\URG,\ \ESP\} & s \in S_3 \cup S_4
+\end{cases}
+\]
+Así, en $S_3 \cup S_4$ el agente tiene entre 3 y 6 acciones disponibles (según cuántas zonas
+tengan WIP). Las acciones fuera de $A(s)$ se enmascaran; si una implementación no las enmascara,
+ejecutar una acción inválida da $-50$ y el estado no cambia ($s'=s$).
+
+\subsection{Dinámica de transición: cómo se llega a \texorpdfstring{$s'$}{s'}}
+
+La recompensa se define sobre la tripla $(s,a,s')$, así que conviene precisar qué cambia de $s$
+a $s'$ con cada acción. Sea $\tau(s,a,s') \in \{0,1\}$ un indicador de que el reloj avanzó
+entre $s$ y $s'$.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{2.1cm}LL@{}}
+\toprule
+\textbf{Acción} & \textbf{Efecto inmediato} & \textbf{Avance del reloj} \\
+\midrule
+$\LOTE{z}$ & $o \to o-1$; salen de $z$ hasta 20 líneas, y $w_z, c_z, u_z$ se recalculan con las líneas que quedan & $\tau=0$ si $o-1\ge1$ y aún hay WIP (nueva decisión inmediata); si no, $\tau=1$ y el reloj avanza hasta que un operario quede libre \\
+$\URG$ & $o \to o-1$; salen las líneas de la orden más urgente en todas las zonas donde tenga líneas, y esas zonas se recalculan & Igual que $\LOTE{z}$ \\
+$\ESP$ & Ninguno & $\tau=1$: el reloj avanza $\Delta t$ o hasta que se libere un operario, lo que ocurra primero \\
+\bottomrule
+\end{tabularx}
+\caption{Transiciones por acción.}
+\end{table}
+
+Cuando $\tau = 1$ ocurren los eventos estocásticos del ambiente: llegan órdenes ($w$, $c$ y
+$\lambda$ pueden subir), la holgura de las órdenes pendientes disminuye ($u$ puede subir),
+operarios terminan su lote ($o$ puede subir) y órdenes se completan o vencen. Si en el avance se
+alcanzan las 8 h, $s'=\sfin$.
+
+% =====================================================================
+\section{Función de recompensa \texorpdfstring{$R(s,a,s')$}{R(s,a,s')}}
+
+La recompensa de cada tripla suma una parte inmediata, que depende del estado de salida y de la
+acción, y una parte de transición, que depende de lo que ocurrió entre $s$ y $s'$:
+\[
+  R(s,a,s') = R_{\mathrm{acc}}(s,a) + R_{\mathrm{tr}}(s,a,s').
+\]
+
+\subsection{Recompensa inmediata de \texorpdfstring{$\LOTE{z}$}{LOTE\_z}}
+
+Es la suma de un pago por consolidación, $P_c(c_z)$, y un bono por urgencia, $B_u(u_z)$, de la zona elegida,
+menos una penalización por descuido si otra zona es crítica:
+\[
+  R_{\mathrm{acc}}(s,\LOTE{z}) = P_c(c_z) + B_u(u_z) - 6\cdot\mathbf{1}\!\left[\exists z'\neq z: u_{z'}=3 \ \wedge\ u_z<3\right],
+\]
+con $P_c(0)=1$, $P_c(1)=5$, $P_c(2)=10$ y $B_u(1)=0$, $B_u(2)=3$, $B_u(3)=8$.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+ & \textbf{$u_z=1$} (holgura $>60$ min) & \textbf{$u_z=2$} (15--60 min) & \textbf{$u_z=3$} (crítica) \\
+\midrule
+$c_z=0$ (sin SKU repetido)          & $+1$  & $+4$  & $+9$  \\
+$c_z=1$ (2--4 órdenes comparten SKU) & $+5$  & $+8$  & $+13$ \\
+$c_z=2$ (5 o más comparten SKU)      & $+10$ & $+13$ & $+18$ \\
+\bottomrule
+\end{tabular}
+\caption{$P_c(c_z)+B_u(u_z)$ para $\LOTE{z}$ (antes de la penalización por descuido de $-6$).}
+\end{table}
+
+\subsection{Recompensa inmediata de \texorpdfstring{$\URG$ y $\ESP$}{URGENTE y ESPERAR}}
+
+Las reglas de $\ESP$ se evalúan en orden; aplica la primera que se cumpla.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{2cm}Lc@{}}
+\toprule
+\textbf{Acción} & \textbf{Condición sobre $s$} & \textbf{$R_{\mathrm{acc}}(s,a)$} \\
+\midrule
+\multirow{3}{*}{$\URG$} & $\umax = 3$ (hay una orden crítica) & $+8$ \\
+ & $\umax = 2$ & $+1$ \\
+ & $\umax = 1$ (no hay urgencia: desperdicia consolidación) & $-4$ \\
+\midrule
+\multirow{6}{*}{$\ESP$} & $s\in S_1$: $o = 0$ (no hay alternativa) & $0$ \\
+ & $s\in S_2$: no hay trabajo pendiente & $0$ \\
+ & $s\in S_3$: operario ocioso con una orden crítica & $-10$ \\
+ & $s\in S_4$, $\lambda = 2$ y $c_z \le 1\ \forall z$ (vale la pena esperar para consolidar) & $+2$ \\
+ & $s\in S_4$ y $\lambda = 0$ (no llegarán órdenes, esperar no sirve) & $-3$ \\
+ & $s\in S_4$ en cualquier otro caso (operario ocioso) & $-1$ \\
+\bottomrule
+\end{tabularx}
+\caption{Recompensa inmediata de $\URG$ y $\ESP$.}
+\end{table}
+
+\subsection{Recompensa de transición}
+
+Sean $n_{\mathrm{ok}}$ y $n_{\mathrm{venc}}$ el número de órdenes completadas a tiempo y de órdenes
+que vencieron sin completarse durante la transición $s \to s'$, y $n_{\mathrm{pend}}$ el número
+de órdenes pendientes al llegar a $\sfin$. Como el estado agregado no guarda la identidad de cada
+orden, el simulador registra estos conteos en cada transición; para una tripla concreta su valor es conocido.
+\[
+  R_{\mathrm{tr}}(s,a,s') = 3\,n_{\mathrm{ok}} - 20\,n_{\mathrm{venc}}
+   - 2\,\tau(s,a,s')\sum_{z\in Z}\mathbf{1}[w'_z = 3]
+   - 30\,n_{\mathrm{pend}}\,\mathbf{1}[s'=\sfin].
+\]
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}Lc@{}}
+\toprule
+\textbf{Evento en la transición $(s,a,s')$} & \textbf{Recompensa} \\
+\midrule
+Cada orden completada antes de su deadline & $+3$ \\
+Cada orden que vence sin completarse (se cuenta una sola vez por orden) & $-20$ \\
+Cada zona con $w'_z = 3$ en $s'$, solo si el reloj avanzó ($\tau=1$) & $-2$ \\
+Llegada a $s'=\sfin$: cada orden pendiente sin despachar & $-30$ \\
+Acción inválida ($a\notin A(s)$, si no hay enmascaramiento); en este caso $s'=s$ y no aplica nada más & $-50$ \\
+\bottomrule
+\end{tabularx}
+\caption{Recompensas de transición.}
+\end{table}
+
+\textbf{Justificación de los valores.} Vencer una orden ($-20$) cuesta más que el mejor lote posible
+($+18$), así que el agente nunca debería sacrificar un deadline por consolidar. Esperar ($+2$) paga
+menos que un lote con consolidación media ($+5$): el agente solo aprende a esperar cuando el valor
+futuro de un lote más grande ($+10$) lo compensa, que es justamente el balance que debe descubrir.
+Se recomienda un factor de descuento $\gamma = 0{,}99$ por decisión.
+
+\subsection{Triplas \texorpdfstring{$(s,a,s')$}{(s,a,s')} de ejemplo}
+
+La tabla aplica la función completa a transiciones concretas que cubren todas las clases de estado
+y todas las acciones. Notación: $s=(w_A,w_B,w_C,w_D \mid c_A,c_B,c_C,c_D \mid u_A,u_B,u_C,u_D \mid o,\lambda)$.
+
+\begin{table}[h]
+\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{@{}p{0.5cm}p{5.0cm}p{1.6cm}Lc@{}}
+\toprule
+\textbf{\#} & \textbf{Estado de salida $s$ y de llegada $s'$} & \textbf{Acción $a$} & \textbf{Cálculo} & \textbf{$R(s,a,s')$} \\
+\midrule
+T1 & $s=(1,2,0,0|0,2,0,0|3,1,0,0|2,1)$\newline $s'=(0,2,0,0|0,2,0,0|0,1,0,0|1,1)$ & $\LOTE{A}$ & $c_A=0,u_A=3$: $1+8$; queda un operario libre, $\tau=0$ & $+9$ \\
+\addlinespace[2pt]
+T2 & $s=(0,2,0,0|0,2,0,0|0,1,0,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,1,0|1,1)$ & $\LOTE{B}$ & $c_B=2$: $+10$ (5 órdenes con el mismo SKU en una visita); en el avance se completa la orden de A ($+3$) y llegan órdenes a C & $+13$ \\
+\addlinespace[2pt]
+T3 & $s=(2,1,0,0|1,0,0,0|1,1,0,0|1,1)$\newline $s'=(2,0,0,0|1,0,0,0|1,0,0,0|0,1)$ & $\URG$ & $\umax=1$: $-4$; sin eventos & $-4$ \\
+\addlinespace[2pt]
+T4 & $s=(0,0,1,0|0,0,0,0|0,0,3,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,3,0|1,1)$ & $\ESP$ & $s\in S_3$: $-10$; la orden crítica vence: $-20$ & $-30$ \\
+\addlinespace[2pt]
+T5 & $s=(2,1,0,0|1,1,0,0|1,1,0,0|1,2)$\newline $s'=(2,1,0,0|2,1,0,0|1,1,0,0|1,2)$ & $\ESP$ & $s\in S_4$, $\lambda=2$, $c_z\le1$: $+2$; llegan órdenes y $c_A$ sube a 2 & $+2$ \\
+\addlinespace[2pt]
+T6 & $s=(3,1,0,0|1,0,0,0|2,1,0,0|0,1)$\newline $s'=(3,1,0,0|1,0,0,0|2,1,0,0|1,1)$ & $\ESP$ & $s\in S_1$: $0$; se completa una orden: $+3$; A sigue saturada: $-2$ & $+1$ \\
+\addlinespace[2pt]
+T7 & $s=(0,2,1,0|0,2,0,0|0,1,3,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,3,0|0,1)$ & $\LOTE{B}$ & $+10$; descuido (C es crítica): $-6$; vence la orden de C: $-20$ & $-16$ \\
+\addlinespace[2pt]
+T8 & $s=(1,0,0,0|0,0,0,0|3,0,0,0|0,0)$\newline $s'=\sfin$ & $\ESP$ & $s\in S_1$: $0$; termina el turno con 2 órdenes pendientes: $2\times(-30)$ & $-60$ \\
+\addlinespace[2pt]
+T9 & $s=(1,2,0,0|0,2,0,0|3,1,0,0|2,1)$\newline $s'=s$ (sin cambio) & $\LOTE{C}$ & $w_C=0$: acción inválida & $-50$ \\
+\bottomrule
+\end{tabularx}
+\caption{Ejemplos de recompensa para triplas $(s,a,s')$.}
+\end{table}
+
+Las triplas T1 y T2 muestran el caso que motiva la aplicación: con una orden crítica en A y 5 órdenes
+que piden el mismo SKU en B, el agente atiende primero la urgencia ($+9$, frente a $+4$ de ir a B con
+la penalización por descuido) y luego recoge el SKU repetido en una sola visita ($+10$), en vez de
+ir 5 veces a la misma ubicación. T7 muestra el costo de ignorar una urgencia por perseguir consolidación.
+
+\end{document}
