@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Datos y resultados pesados (se conserva la estructura con .gitkeep)
+data/raw/*
+data/processed/*
+data/simulated/*
+results/models/*
+results/logs/*
+!**/.gitkeep
+
+# LaTeX (el PDF compilado SÍ se versiona)
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.lof
+*.lot
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

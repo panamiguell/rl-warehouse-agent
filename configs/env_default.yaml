@@ -1,0 +1,35 @@
+# Parámetros del ambiente (deben coincidir con docs/entrega1).
+
+episodio:
+  duracion_turno_min: 480      # 8 horas
+  delta_t_min: 2               # avance del reloj con ESPERAR
+  gamma: 0.99
+
+centro_distribucion:
+  zonas: [A, B, C, D]
+  capacidad_carro_lineas: 20   # Cmax
+
+discretizacion:
+  wip_lineas: [0, 5, 15]           # w_z: 0 | 1-5 | 6-15 | 16+
+  consolidacion_ordenes: [1, 4]    # c_z: sin repetidos | 2-4 | 5+
+  holgura_min: [15, 60]            # u_z: <=15 critica | 15-60 | >60
+  operarios_max: 3                 # o: 0, 1, 2, 3+
+  llegadas_15min: [5, 15]          # lambda: <5 | 5-15 | >15
+
+recompensas:
+  lote_consolidacion: {0: 1, 1: 5, 2: 10}
+  lote_bono_urgencia: {1: 0, 2: 3, 3: 8}
+  lote_descuido: -6
+  urgente: {1: -4, 2: 1, 3: 8}
+  esperar:
+    sin_alternativa: 0
+    sin_trabajo: 0
+    con_orden_critica: -10
+    consolidar_alta_demanda: 2
+    sin_llegadas: -3
+    ocioso: -1
+  orden_a_tiempo: 3
+  orden_vencida: -20
+  zona_saturada: -2
+  accion_invalida: -50
+  orden_pendiente_fin_turno: -30
