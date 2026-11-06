@@ -33,3 +33,14 @@ recompensas:
   zona_saturada: -2
   accion_invalida: -50
   orden_pendiente_fin_turno: -30
+
+# Supuestos del simulador; ver docs/implementacion.md.
+simulacion:
+  operarios: 3
+  ordenes_por_minuto: 0.5
+  tiempo_base_min: 3
+  tiempo_por_sku_min: 0.5
+  tiempo_por_linea_min: 0.1
+  max_lineas_orden: 6
+  sku_por_zona: 10
+  deadline_min: [30, 120]
