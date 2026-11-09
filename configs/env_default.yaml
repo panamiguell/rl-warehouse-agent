@@ -2,8 +2,8 @@
 
 episodio:
   duracion_turno_min: 480      # 8 horas
-  delta_t_min: 2               # avance del reloj con ESPERAR
-  gamma: 0.99
+  delta_t_min: 2               # avance máximo del reloj con operarios libres
+  gamma: 0.95                  # por cada delta_t (descuento por tiempo transcurrido)
 
 centro_distribucion:
   zonas: [A, B, C, D]
@@ -17,30 +17,39 @@ discretizacion:
   llegadas_15min: [5, 15]          # lambda: <5 | 5-15 | >15
 
 recompensas:
-  lote_consolidacion: {0: 1, 1: 5, 2: 10}
-  lote_bono_urgencia: {1: 0, 2: 3, 3: 8}
-  lote_descuido: -6
-  urgente: {1: -4, 2: 1, 3: 8}
+  visita_ahorrada: 2               # por cada línea que no requiere una visita extra
+  costo_viaje: -1                  # por cada lote o urgente despachado
+  lote_descuido: -10               # LOTE_z con otra zona crítica y z no crítica
+  urgente_sin_urgencia: -4         # URGENTE con u_max = 1
   esperar:
     sin_alternativa: 0
     sin_trabajo: 0
     con_orden_critica: -10
-    consolidar_alta_demanda: 2
+    consolidar_alta_demanda: 0
     sin_llegadas: -3
     ocioso: -1
   orden_a_tiempo: 3
   orden_vencida: -20
-  zona_saturada: -2
+  linea_pendiente_min: -0.05       # costo de WIP: por línea sin asignar, por minuto transcurrido
+  zona_critica: -1                 # por zona con u_z = 3 en s', si avanzó el reloj
   accion_invalida: -50
   orden_pendiente_fin_turno: -30
 
 # Supuestos del simulador; ver docs/implementacion.md.
 simulacion:
   operarios: 3
-  ordenes_por_minuto: 0.5
-  tiempo_base_min: 3
-  tiempo_por_sku_min: 0.5
-  tiempo_por_linea_min: 0.1
+  # Demanda por franjas: [minuto de inicio, órdenes por minuto]. Dos picos en el turno.
+  perfil_demanda:
+    - [0, 0.3]
+    - [60, 1.2]
+    - [180, 0.4]
+    - [270, 1.2]
+    - [390, 0.3]
+  corte_llegadas_min: 30           # no llegan órdenes en los últimos 30 min del turno
+  tiempo_base_min: 4               # desplazamiento a la zona y regreso
+  tiempo_por_sku_min: 1.0          # por ubicación visitada
+  tiempo_por_linea_min: 0.2        # por línea (tomar y separar en la put-wall)
   max_lineas_orden: 6
-  sku_por_zona: 10
+  sku_por_zona: 30
+  zipf_s: 1.0                      # popularidad de SKU (curva ABC); 0 = uniforme
   deadline_min: [30, 120]
