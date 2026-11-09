@@ -74,7 +74,15 @@ def main():
                         help="Minutos por factor gamma (descuento semi-Markov). Por defecto, delta_t del config")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", type=Path, default=ROOT / "results")
+    parser.add_argument("--plot-only", action="store_true", help="Regenera las gráficas desde results/logs")
     args = parser.parse_args()
+    if args.plot_only:
+        logs = args.out / "logs"
+        with (logs / "learning_curve.csv").open(encoding="utf-8") as stream:
+            curve = [dict(r, episode=int(r["episode"]), reward=float(r["reward"])) for r in csv.DictReader(stream)]
+        summary = json.loads((logs / "summary.json").read_text(encoding="utf-8"))["results"]
+        plot(curve, summary, args.out / "figures")
+        return
     if min(args.episodes, args.eval_episodes, args.eval_every) < 1:
         parser.error("Los números de episodios deben ser positivos")
 
@@ -139,6 +147,7 @@ def plot(curve, summary, figs):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
 
     figs.mkdir(parents=True, exist_ok=True)
     ink, muted, grid = "#1F2933", "#6B7280", "#E5E7EB"
@@ -168,7 +177,10 @@ def plot(curve, summary, figs):
     fig.savefig(figs / "curvas_aprendizaje.png")
     plt.close(fig)
 
-    items = sorted(((k, v) for k, v in summary.items() if k != "esperar_siempre"), key=lambda kv: kv[1]["reward"])
+    # Las reglas degeneradas (no despachar nunca, o despachar orden por orden) siguen en summary.md,
+    # pero aplastarían la escala de la gráfica.
+    hidden = {"esperar_siempre", "urgente_siempre"}
+    items = sorted(((k, v) for k, v in summary.items() if k not in hidden), key=lambda kv: kv[1]["reward"])
     fig, axes = plt.subplots(1, 2, figsize=(11, 5), dpi=150, sharey=True)
     names = [labels.get(k, k.replace("_", " ")) for k, _ in items]
     for ax, key, title in [(axes[0], "reward", "Recompensa media por turno"),
@@ -179,11 +191,17 @@ def plot(curve, summary, figs):
         for i, v in enumerate(values):
             ax.text(v, i, f" {v:,.0f}", va="center", ha="left" if v >= 0 else "right", fontsize=8.5, color=ink)
         ax.axvline(0, color=muted, lw=0.8)
+        ax.xaxis.set_major_locator(MaxNLocator(5))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))
+        lo, hi = min(values + [0]), max(values + [0])
+        pad = 0.18 * (hi - lo or 1)
+        ax.set_xlim(lo - (pad if lo < 0 else 0), hi + (pad if hi > 0 else 0))
         ax.set_title(title, loc="left", fontsize=11, color=ink, weight="bold")
         ax.grid(axis="x", color=grid, lw=0.8)
         ax.spines[["top", "right", "left"]].set_visible(False)
         ax.tick_params(axis="y", length=0)
-    fig.suptitle("Agentes de RL (color) frente a reglas fijas (gris), mismas semillas de evaluación",
+    fig.suptitle("Agentes de RL (color) frente a reglas fijas (gris), mismas semillas de evaluación. "
+                 "Sin las reglas degeneradas (ver summary.md)",
                  x=0.01, ha="left", fontsize=10, color=muted)
     fig.tight_layout()
     fig.savefig(figs / "comparacion.png")
