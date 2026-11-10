@@ -61,7 +61,7 @@
   {\small Aprendizaje por Refuerzo \textperiodcentered{} Prof. Nicolás Cardozo}\\[10pt]
   {\LARGE\bfseries\color{azul} Agente de RL para la consolidación de órdenes\\[2pt] de picking en un centro de distribución}\\[8pt]
   {\large Entrega 1: estados, acciones y función de recompensa}\\[8pt]
-  Miguel Ángel Muñoz Layton \quad\textperiodcentered\quad [Nombre del compañero]\\[2pt]
+  Miguel Ángel Muñoz Layton \quad\textperiodcentered\quad Daniel F. Barrera Armendaris\\[2pt]
   {\small Noviembre de 2026}
 \end{center}
 
@@ -95,7 +95,8 @@ el día; por eso se plantea como un problema de RL.
   \item Un episodio es un turno de 8 horas.
   \item Cada operario lleva un carro con capacidad de $C_{\max}=20$ líneas.
   \item El número de operarios puede variar en el turno (pausas, ausencias); el agente observa cuántos están libres.
-  \item Las órdenes llegan de forma estocástica; el agente no conoce las órdenes futuras.
+  \item Las órdenes llegan de forma estocástica, con picos de demanda durante el turno; el agente no conoce las órdenes futuras.
+  \item Pocos SKU concentran la mayor parte de la demanda (curva ABC), por lo que varias órdenes suelen pedir los mismos SKU.
 \end{itemize}
 
 \textbf{Lote consolidado.} Al liberar un lote en la zona $z$, el sistema toma las líneas pendientes
@@ -104,8 +105,9 @@ unidades del mismo SKU se recogen en una sola visita. Después se separan por or
 consolidación (\emph{put-wall}) antes del despacho.
 
 \textbf{Momentos de decisión.} Hay una decisión (a) cada vez que un operario queda libre y (b) cada
-$\Delta t = 2$ min mientras haya operarios libres sin trabajo. Cada acción asigna como máximo un
-operario; si quedan más operarios libres, se toma otra decisión de inmediato sin que avance el reloj.
+$\Delta t = 2$ min en cualquier caso: el reloj nunca avanza más de $\Delta t$ por decisión. Si todos los
+operarios están ocupados, la única acción posible es esperar. Cada acción asigna como máximo un
+operario; si quedan más operarios libres y hay trabajo, se toma otra decisión de inmediato sin que avance el reloj.
 
 \subsection{Comportamiento deseado y no deseado del agente}
 
@@ -115,18 +117,18 @@ operario; si quedan más operarios libres, se toma otra decisión de inmediato s
 \toprule
 \textbf{\#} & \textbf{Comportamiento} & \textbf{Tipo} & \textbf{Cómo lo controla la recompensa} \\
 \midrule
-D1 & Recoger en una sola visita un SKU que piden varias órdenes & Deseado & $\LOTE{z}$ paga más cuanto mayor es $c_z$ ($+1,+5,+10$) \\
-D2 & Atender primero las órdenes con holgura crítica ($\le 15$ min) & Deseado & Bono de urgencia $+8$; $-20$ por orden vencida \\
-D3 & Mantener ocupados a los operarios cuando hay trabajo & Deseado & $\ESP$ con operarios libres cuesta $-1$ o $-3$ \\
-D4 & Esperar brevemente para formar lotes más grandes si llegan muchas órdenes y hay holgura & Deseado & $\ESP$ da $+2$ si $\lambda=2$ y la consolidación aún es baja \\
-D5 & Mantener controlado el WIP de cada zona & Deseado & $-2$ por zona saturada ($w_z=3$) cuando avanza el reloj \\
+D1 & Recoger en una sola visita un SKU que piden varias órdenes & Deseado & $+2$ por cada visita ahorrada (líneas del lote menos ubicaciones visitadas) \\
+D2 & Atender primero las órdenes con holgura crítica ($\le 15$ min) & Deseado & $-1$ por zona crítica cada vez que avanza el reloj; $-20$ por orden vencida \\
+D3 & Mantener ocupados a los operarios cuando hay trabajo & Deseado & $\ESP$ con operarios libres cuesta $-1$ o $-3$, más el costo de WIP \\
+D4 & Esperar brevemente para formar lotes más grandes si llegan muchas órdenes y hay holgura & Deseado & $\ESP$ no se penaliza (0) si $\lambda=2$ y la consolidación aún es baja; las visitas ahorradas del lote siguiente pagan la espera \\
+D5 & Mantener controlado el WIP & Deseado & $-0{,}05$ por cada línea pendiente sin asignar, por minuto \\
 D6 & Despachar todas las órdenes antes del fin de turno & Deseado & $+3$ por orden a tiempo; $-30$ por orden pendiente al cierre \\
 \midrule
-N1 & Ir varias veces a la misma ubicación por órdenes distintas & No deseado & $\URG$ sin urgencia cuesta $-4$; un lote sin repetidos solo paga $+1$ \\
-N2 & Retener órdenes esperando consolidar hasta que vencen & No deseado & $-20$ por orden vencida, mayor que el mejor lote ($+18$) \\
+N1 & Ir varias veces a la misma ubicación por órdenes distintas & No deseado & $\URG$ sin urgencia cuesta $-4$ extra; cada viaje cuesta $-1$ y uno sin SKU repetidos no ahorra visitas \\
+N2 & Retener órdenes esperando consolidar hasta que vencen & No deseado & $-20$ por orden vencida, más que lo que ahorra consolidar todas sus líneas ($\le +12$) \\
 N3 & Dejar operarios ociosos con órdenes críticas pendientes & No deseado & $\ESP$ con una zona crítica cuesta $-10$ \\
-N4 & Olvidar zonas con poca coincidencia de SKU (inanición) & No deseado & Su urgencia $u_z$ sube y su lote llega a pagar $+9$ \\
-N5 & Atender una zona cómoda mientras otra tiene una orden crítica & No deseado & $-6$ extra a $\LOTE{z}$ si otra zona es crítica y $z$ no \\
+N4 & Olvidar zonas con poca coincidencia de SKU (inanición) & No deseado & Su urgencia $u_z$ sube: $-1$ por avance mientras sea crítica y $-10$ a los lotes de otras zonas \\
+N5 & Atender una zona cómoda mientras otra tiene una orden crítica & No deseado & $-10$ extra a $\LOTE{z}$ si otra zona es crítica y $z$ no \\
 N6 & Asignar trabajo sin operarios libres o a una zona sin líneas & No deseado & Acción enmascarada; si se ejecuta, $-50$ \\
 \bottomrule
 \end{tabularx}
@@ -252,7 +254,7 @@ entre $s$ y $s'$.
 \toprule
 \textbf{Acción} & \textbf{Efecto inmediato} & \textbf{Avance del reloj} \\
 \midrule
-$\LOTE{z}$ & $o \to o-1$; salen de $z$ hasta 20 líneas, y $w_z, c_z, u_z$ se recalculan con las líneas que quedan & $\tau=0$ si $o-1\ge1$ y aún hay WIP (nueva decisión inmediata); si no, $\tau=1$ y el reloj avanza hasta que un operario quede libre \\
+$\LOTE{z}$ & $o \to o-1$; salen de $z$ hasta 20 líneas, y $w_z, c_z, u_z$ se recalculan con las líneas que quedan & $\tau=0$ si $o-1\ge1$ y aún hay WIP (nueva decisión inmediata); si no, $\tau=1$ y el reloj avanza $\Delta t$ o hasta que un operario quede libre, lo que ocurra primero \\
 $\URG$ & $o \to o-1$; salen las líneas de la orden más urgente en todas las zonas donde tenga líneas, y esas zonas se recalculan & Igual que $\LOTE{z}$ \\
 $\ESP$ & Ninguno & $\tau=1$: el reloj avanza $\Delta t$ o hasta que se libere un operario, lo que ocurra primero \\
 \bottomrule
@@ -260,6 +262,7 @@ $\ESP$ & Ninguno & $\tau=1$: el reloj avanza $\Delta t$ o hasta que se libere un
 \caption{Transiciones por acción.}
 \end{table}
 
+Así, ninguna transición dura más de $\Delta t$ y todas acumulan costos de intervalos comparables.
 Cuando $\tau = 1$ ocurren los eventos estocásticos del ambiente: llegan órdenes ($w$, $c$ y
 $\lambda$ pueden subir), la holgura de las órdenes pendientes disminuye ($u$ puede subir),
 operarios terminan su lote ($o$ puede subir) y órdenes se completan o vencen. Si en el avance se
@@ -273,33 +276,14 @@ acción, y una parte de transición, que depende de lo que ocurrió entre $s$ y 
 \[
   R(s,a,s') = R_{\mathrm{acc}}(s,a) + R_{\mathrm{tr}}(s,a,s').
 \]
+La consolidación no se paga con un bono fijo por lote, sino por las \emph{visitas ahorradas}: si un lote
+tiene $\ell$ líneas y visita $v$ ubicaciones distintas, ahorra $n_{\mathrm{ahorr}}=\ell-v$ visitas. Así,
+despachar muchos lotes pequeños no da más recompensa que uno grande, y esperar a que se acumulen SKU
+repetidos sí puede pagar.
 
-\subsection{Recompensa inmediata de \texorpdfstring{$\LOTE{z}$}{LOTE\_z}}
+\subsection{Recompensa inmediata \texorpdfstring{$R_{\mathrm{acc}}(s,a)$}{R\_acc(s,a)}}
 
-Es la suma de un pago por consolidación, $P_c(c_z)$, y un bono por urgencia, $B_u(u_z)$, de la zona elegida,
-menos una penalización por descuido si otra zona es crítica:
-\[
-  R_{\mathrm{acc}}(s,\LOTE{z}) = P_c(c_z) + B_u(u_z) - 6\cdot\mathbf{1}\!\left[\exists z'\neq z: u_{z'}=3 \ \wedge\ u_z<3\right],
-\]
-con $P_c(0)=1$, $P_c(1)=5$, $P_c(2)=10$ y $B_u(1)=0$, $B_u(2)=3$, $B_u(3)=8$.
-
-\begin{table}[h]
-\centering\small
-\begin{tabular}{@{}lccc@{}}
-\toprule
- & \textbf{$u_z=1$} (holgura $>60$ min) & \textbf{$u_z=2$} (15--60 min) & \textbf{$u_z=3$} (crítica) \\
-\midrule
-$c_z=0$ (sin SKU repetido)          & $+1$  & $+4$  & $+9$  \\
-$c_z=1$ (2--4 órdenes comparten SKU) & $+5$  & $+8$  & $+13$ \\
-$c_z=2$ (5 o más comparten SKU)      & $+10$ & $+13$ & $+18$ \\
-\bottomrule
-\end{tabular}
-\caption{$P_c(c_z)+B_u(u_z)$ para $\LOTE{z}$ (antes de la penalización por descuido de $-6$).}
-\end{table}
-
-\subsection{Recompensa inmediata de \texorpdfstring{$\URG$ y $\ESP$}{URGENTE y ESPERAR}}
-
-Las reglas de $\ESP$ se evalúan en orden; aplica la primera que se cumpla.
+Cada viaje despachado ($\LOTE{z}$ o $\URG$) cuesta $-1$. Las reglas de $\ESP$ se evalúan en orden; aplica la primera que se cumpla.
 
 \begin{table}[h]
 \centering\small
@@ -307,31 +291,40 @@ Las reglas de $\ESP$ se evalúan en orden; aplica la primera que se cumpla.
 \toprule
 \textbf{Acción} & \textbf{Condición sobre $s$} & \textbf{$R_{\mathrm{acc}}(s,a)$} \\
 \midrule
-\multirow{3}{*}{$\URG$} & $\umax = 3$ (hay una orden crítica) & $+8$ \\
- & $\umax = 2$ & $+1$ \\
- & $\umax = 1$ (no hay urgencia: desperdicia consolidación) & $-4$ \\
+\multirow{2}{*}{$\LOTE{z}$} & Ninguna otra zona es crítica, o $z$ también lo es & $-1$ \\
+ & Otra zona es crítica ($\exists z'\neq z: u_{z'}=3$) y $z$ no ($u_z<3$): descuido & $-1-10=-11$ \\
+\midrule
+\multirow{2}{*}{$\URG$} & $\umax \ge 2$ & $-1$ \\
+ & $\umax = 1$ (no hay urgencia: desperdicia consolidación) & $-1-4=-5$ \\
 \midrule
 \multirow{6}{*}{$\ESP$} & $s\in S_1$: $o = 0$ (no hay alternativa) & $0$ \\
  & $s\in S_2$: no hay trabajo pendiente & $0$ \\
  & $s\in S_3$: operario ocioso con una orden crítica & $-10$ \\
- & $s\in S_4$, $\lambda = 2$ y $c_z \le 1\ \forall z$ (vale la pena esperar para consolidar) & $+2$ \\
- & $s\in S_4$ y $\lambda = 0$ (no llegarán órdenes, esperar no sirve) & $-3$ \\
+ & $s\in S_4$, $\lambda = 2$ y $c_z \le 1\ \forall z$ (esperar puede formar lotes más consolidados) & $0$ \\
+ & $s\in S_4$ y $\lambda = 0$ (casi no llegan órdenes, esperar no sirve) & $-3$ \\
  & $s\in S_4$ en cualquier otro caso (operario ocioso) & $-1$ \\
 \bottomrule
 \end{tabularx}
-\caption{Recompensa inmediata de $\URG$ y $\ESP$.}
+\caption{Recompensa inmediata por acción.}
 \end{table}
 
-\subsection{Recompensa de transición}
+Ignorar una orden crítica cuesta $-10$ tanto si el operario espera como si se le asigna otra zona.
 
-Sean $n_{\mathrm{ok}}$ y $n_{\mathrm{venc}}$ el número de órdenes completadas a tiempo y de órdenes
-que vencieron sin completarse durante la transición $s \to s'$, y $n_{\mathrm{pend}}$ el número
-de órdenes pendientes al llegar a $\sfin$. Como el estado agregado no guarda la identidad de cada
-orden, el simulador registra estos conteos en cada transición; para una tripla concreta su valor es conocido.
+\subsection{Recompensa de transición \texorpdfstring{$R_{\mathrm{tr}}(s,a,s')$}{R\_tr(s,a,s')}}
+
+Sean $n_{\mathrm{ahorr}}$ las visitas ahorradas por el lote asignado (0 si $a=\ESP$); $n_{\mathrm{ok}}$ y
+$n_{\mathrm{venc}}$ las órdenes completadas a tiempo y las que vencieron sin completarse durante $s \to s'$;
+$A_{\mathrm{wip}}$ el área de WIP del intervalo, es decir, la suma sobre el intervalo de las líneas pendientes
+sin asignar por los minutos que permanecen así ($\le \Delta t$ minutos, porque el reloj nunca avanza más); y
+$n_{\mathrm{pend}}$ las órdenes sin despachar al llegar a $\sfin$. Como el estado agregado no guarda la
+identidad de cada orden, el simulador registra estos conteos en cada transición; para una tripla concreta su
+valor es conocido.
 \[
-  R_{\mathrm{tr}}(s,a,s') = 3\,n_{\mathrm{ok}} - 20\,n_{\mathrm{venc}}
-   - 2\,\tau(s,a,s')\sum_{z\in Z}\mathbf{1}[w'_z = 3]
+\begin{aligned}
+  R_{\mathrm{tr}}(s,a,s') = {}& 2\,n_{\mathrm{ahorr}} + 3\,n_{\mathrm{ok}} - 20\,n_{\mathrm{venc}} - 0{,}05\,A_{\mathrm{wip}} \\
+   & - \tau(s,a,s')\,\mathbf{1}[s'\neq\sfin]\sum_{z\in Z}\mathbf{1}[u'_z = 3]
    - 30\,n_{\mathrm{pend}}\,\mathbf{1}[s'=\sfin].
+\end{aligned}
 \]
 
 \begin{table}[h]
@@ -340,9 +333,11 @@ orden, el simulador registra estos conteos en cada transición; para una tripla 
 \toprule
 \textbf{Evento en la transición $(s,a,s')$} & \textbf{Recompensa} \\
 \midrule
+Cada visita ahorrada por el lote asignado ($\ell - v$) & $+2$ \\
 Cada orden completada antes de su deadline & $+3$ \\
 Cada orden que vence sin completarse (se cuenta una sola vez por orden) & $-20$ \\
-Cada zona con $w'_z = 3$ en $s'$, solo si el reloj avanzó ($\tau=1$) & $-2$ \\
+Cada línea pendiente sin asignar, por minuto transcurrido (costo de WIP) & $-0{,}05$ \\
+Cada zona con $u'_z = 3$ en $s'$, solo si el reloj avanzó ($\tau=1$) y $s'\neq\sfin$ & $-1$ \\
 Llegada a $s'=\sfin$: cada orden pendiente sin despachar & $-30$ \\
 Acción inválida ($a\notin A(s)$, si no hay enmascaramiento); en este caso $s'=s$ y no aplica nada más & $-50$ \\
 \bottomrule
@@ -350,16 +345,29 @@ Acción inválida ($a\notin A(s)$, si no hay enmascaramiento); en este caso $s'=
 \caption{Recompensas de transición.}
 \end{table}
 
-\textbf{Justificación de los valores.} Vencer una orden ($-20$) cuesta más que el mejor lote posible
-($+18$), así que el agente nunca debería sacrificar un deadline por consolidar. Esperar ($+2$) paga
-menos que un lote con consolidación media ($+5$): el agente solo aprende a esperar cuando el valor
-futuro de un lote más grande ($+10$) lo compensa, que es justamente el balance que debe descubrir.
-Se recomienda un factor de descuento $\gamma = 0{,}99$ por decisión.
+\textbf{Justificación de los valores.}
+\begin{itemize}
+  \item Vencer una orden ($-20$) cuesta más de lo que se gana consolidando sus líneas (una orden tiene a lo
+    sumo 6 líneas: $\le +12$), así que el agente no debería sacrificar un deadline por consolidar.
+  \item El costo de WIP hace que esperar nunca sea gratis: con 20 líneas pendientes, esperar $\Delta t=2$ min
+    cuesta $-2$, lo mismo que una visita ahorrada. Esperar solo conviene si las órdenes que llegan
+    comparten SKU con las pendientes, que es justamente el balance que el agente debe descubrir.
+  \item Cobrar por visita ahorrada, y no por lote, evita que el agente gane recompensa fragmentando el trabajo
+    en muchos lotes pequeños; el $-1$ por viaje refuerza lo mismo.
+\end{itemize}
+
+\textbf{Descuento.} Como el reloj avanza a lo sumo $\Delta t$ por decisión pero algunas decisiones son
+inmediatas ($\tau=0$), el descuento se aplica por tiempo transcurrido y no por decisión:
+$\gamma^{\,\Delta_{\mathrm{min}}/\Delta t}$ con $\gamma = 0{,}95$ por cada $\Delta t = 2$ min. Una
+decisión inmediata no se descuenta, de modo que asignar varios operarios en el mismo instante no aplaza
+artificialmente las recompensas futuras.
 
 \subsection{Triplas \texorpdfstring{$(s,a,s')$}{(s,a,s')} de ejemplo}
 
 La tabla aplica la función completa a transiciones concretas que cubren todas las clases de estado
 y todas las acciones. Notación: $s=(w_A,w_B,w_C,w_D \mid c_A,c_B,c_C,c_D \mid u_A,u_B,u_C,u_D \mid o,\lambda)$.
+Para calcular el costo de WIP se indica cuántas líneas hay pendientes; las órdenes que llegan en el intervalo
+se suponen al final de este.
 
 \begin{table}[h]
 \centering\footnotesize
@@ -368,21 +376,21 @@ y todas las acciones. Notación: $s=(w_A,w_B,w_C,w_D \mid c_A,c_B,c_C,c_D \mid u
 \toprule
 \textbf{\#} & \textbf{Estado de salida $s$ y de llegada $s'$} & \textbf{Acción $a$} & \textbf{Cálculo} & \textbf{$R(s,a,s')$} \\
 \midrule
-T1 & $s=(1,2,0,0|0,2,0,0|3,1,0,0|2,1)$\newline $s'=(0,2,0,0|0,2,0,0|0,1,0,0|1,1)$ & $\LOTE{A}$ & $c_A=0,u_A=3$: $1+8$; queda un operario libre, $\tau=0$ & $+9$ \\
+T1 & $s=(1,2,0,0|0,2,0,0|3,1,0,0|2,1)$\newline $s'=(0,2,0,0|0,2,0,0|0,1,0,0|1,1)$ & $\LOTE{A}$ & A tiene 3 líneas críticas de 3 SKU distintos: viaje $-1$, sin visitas ahorradas; queda un operario libre y hay WIP en B, $\tau=0$ & $-1$ \\
 \addlinespace[2pt]
-T2 & $s=(0,2,0,0|0,2,0,0|0,1,0,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,1,0|1,1)$ & $\LOTE{B}$ & $c_B=2$: $+10$ (5 órdenes con el mismo SKU en una visita); en el avance se completa la orden de A ($+3$) y llegan órdenes a C & $+13$ \\
+T2 & $s=(0,2,0,0|0,2,0,0|0,1,0,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,1,0|1,1)$ & $\LOTE{B}$ & B tiene 8 líneas: 5 órdenes piden el mismo SKU más 3 SKU distintos, 4 visitas: viaje $-1$, ahorro $4\times2=+8$; en los 2 min termina el lote de A y se completa su orden ($+3$); no quedan líneas sin asignar; llegan órdenes a C & $+10$ \\
 \addlinespace[2pt]
-T3 & $s=(2,1,0,0|1,0,0,0|1,1,0,0|1,1)$\newline $s'=(2,0,0,0|1,0,0,0|1,0,0,0|0,1)$ & $\URG$ & $\umax=1$: $-4$; sin eventos & $-4$ \\
+T3 & $s=(2,1,0,0|1,0,0,0|1,1,0,0|1,1)$\newline $s'=(2,0,0,0|1,0,0,0|1,0,0,0|0,1)$ & $\URG$ & $\umax=1$: $-1-4$; la orden tenía 2 líneas en A y 1 en B; quedan 6 líneas en A: WIP $6\times2\times0{,}05=-0{,}6$ & $-5{,}6$ \\
 \addlinespace[2pt]
-T4 & $s=(0,0,1,0|0,0,0,0|0,0,3,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,3,0|1,1)$ & $\ESP$ & $s\in S_3$: $-10$; la orden crítica vence: $-20$ & $-30$ \\
+T4 & $s=(0,0,1,0|0,0,0,0|0,0,3,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,3,0|1,1)$ & $\ESP$ & $s\in S_3$: $-10$; la orden crítica de C (1 línea) vence: $-20$; C sigue crítica: $-1$; WIP $-0{,}1$ & $-31{,}1$ \\
 \addlinespace[2pt]
-T5 & $s=(2,1,0,0|1,1,0,0|1,1,0,0|1,2)$\newline $s'=(2,1,0,0|2,1,0,0|1,1,0,0|1,2)$ & $\ESP$ & $s\in S_4$, $\lambda=2$, $c_z\le1$: $+2$; llegan órdenes y $c_A$ sube a 2 & $+2$ \\
+T5 & $s=(2,1,0,0|1,1,0,0|1,1,0,0|1,2)$\newline $s'=(2,1,0,0|2,1,0,0|1,1,0,0|1,2)$ & $\ESP$ & $s\in S_4$, $\lambda=2$, $c_z\le1$: $0$; 11 líneas pendientes: WIP $-1{,}1$; llegan órdenes y $c_A$ sube a 2 & $-1{,}1$ \\
 \addlinespace[2pt]
-T6 & $s=(3,1,0,0|1,0,0,0|2,1,0,0|0,1)$\newline $s'=(3,1,0,0|1,0,0,0|2,1,0,0|1,1)$ & $\ESP$ & $s\in S_1$: $0$; se completa una orden: $+3$; A sigue saturada: $-2$ & $+1$ \\
+T6 & $s=(3,1,0,0|1,0,0,0|2,1,0,0|0,1)$\newline $s'=(3,1,0,0|1,0,0,0|2,1,0,0|1,1)$ & $\ESP$ & $s\in S_1$: $0$; se completa una orden: $+3$; 22 líneas pendientes: WIP $-2{,}2$ & $+0{,}8$ \\
 \addlinespace[2pt]
-T7 & $s=(0,2,1,0|0,2,0,0|0,1,3,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,3,0|0,1)$ & $\LOTE{B}$ & $+10$; descuido (C es crítica): $-6$; vence la orden de C: $-20$ & $-16$ \\
+T7 & $s=(0,2,1,0|0,2,0,0|0,1,3,0|1,1)$\newline $s'=(0,0,1,0|0,0,0,0|0,0,3,0|0,1)$ & $\LOTE{B}$ & Lote de T2 ($-1+8$); descuido (C es crítica): $-10$; vence la orden de C: $-20$; C sigue crítica: $-1$; WIP $-0{,}1$ & $-24{,}1$ \\
 \addlinespace[2pt]
-T8 & $s=(1,0,0,0|0,0,0,0|3,0,0,0|0,0)$\newline $s'=\sfin$ & $\ESP$ & $s\in S_1$: $0$; termina el turno con 2 órdenes pendientes: $2\times(-30)$ & $-60$ \\
+T8 & $s=(1,0,0,0|0,0,0,0|3,0,0,0|0,0)$\newline $s'=\sfin$ & $\ESP$ & $s\in S_1$: $0$; WIP $2\times2\times0{,}05=-0{,}2$; termina el turno con 2 órdenes pendientes: $2\times(-30)$ & $-60{,}2$ \\
 \addlinespace[2pt]
 T9 & $s=(1,2,0,0|0,2,0,0|3,1,0,0|2,1)$\newline $s'=s$ (sin cambio) & $\LOTE{C}$ & $w_C=0$: acción inválida & $-50$ \\
 \bottomrule
@@ -391,8 +399,9 @@ T9 & $s=(1,2,0,0|0,2,0,0|3,1,0,0|2,1)$\newline $s'=s$ (sin cambio) & $\LOTE{C}$ 
 \end{table}
 
 Las triplas T1 y T2 muestran el caso que motiva la aplicación: con una orden crítica en A y 5 órdenes
-que piden el mismo SKU en B, el agente atiende primero la urgencia ($+9$, frente a $+4$ de ir a B con
-la penalización por descuido) y luego recoge el SKU repetido en una sola visita ($+10$), en vez de
-ir 5 veces a la misma ubicación. T7 muestra el costo de ignorar una urgencia por perseguir consolidación.
+que piden el mismo SKU en B, atender primero la urgencia cuesta $-1$, mientras que ir a B de inmediato
+daría $-1-10+8=-3$ y arriesgaría el vencimiento de A. Luego el agente recoge el SKU repetido en una sola
+visita (T2, $+8$ por ahorro), en vez de ir 5 veces a la misma ubicación. T7 muestra el costo de ignorar una
+urgencia por perseguir consolidación.
 
 \end{document}
