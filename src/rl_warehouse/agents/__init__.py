@@ -1,1 +1,3 @@
-"""Agentes de aprendizaje por refuerzo (tabulares y aproximados)."""
+from .tabular import TabularAgent
+
+__all__ = ["TabularAgent"]

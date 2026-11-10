@@ -36,12 +36,17 @@ rl-warehouse-agent/
 | --- | --- | --- |
 | 1 | Definición de estados, acciones y función de recompensa R(s, a, s') | [`docs/entrega1/entrega1_definicion_mdp.pdf`](docs/entrega1/entrega1_definicion_mdp.pdf) |
 
-## Instalación
+## Instalación con Conda
 
-```bash
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+```powershell
+conda env create -f environment.yml
+conda activate rl-warehouse-agent
+```
+
+Para actualizar el ambiente tras cambios en sus dependencias:
+
+```powershell
+conda env update -f environment.yml
 ```
 
 ## Compilar los documentos LaTeX
@@ -55,3 +60,13 @@ latexmk -c                                   # limpia archivos auxiliares
 También se puede subir la carpeta `docs/entrega1` a Overleaf y compilar con pdfLaTeX.
 
 Los valores numéricos del documento (discretización y recompensas) están replicados en `configs/env_default.yaml`; si se cambia uno, hay que cambiar el otro.
+
+## Simulador y entrenamiento
+
+Implementación ejecutable de Gymnasium, agentes Q-learning, SARSA y Monte Carlo, pruebas y comparación reproducible. Consulta [instrucciones y supuestos](docs/implementacion.md).
+
+```powershell
+conda activate rl-warehouse-agent
+python -m pytest
+python experiments/train.py --episodes 100 --eval-episodes 10
+```
