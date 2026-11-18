@@ -9,7 +9,8 @@ Repositorio del proyecto del curso **Aprendizaje por Refuerzo** (Maestría en In
 ```
 rl-warehouse-agent/
 ├── docs/                  Documentación y entregas del curso
-│   ├── entrega1/          Entrega 1: estados, acciones y recompensas (LaTeX + PDF)
+│   ├── entrega1/          Entrega 1: estados, acciones y recompensas (LaTeX + PDF), tal como se entregó
+│   ├── entrega_final/     Reporte final (LaTeX + PDF)
 │   └── referencias/       Artículos y material de apoyo
 ├── data/
 │   ├── raw/               Datos originales (órdenes, ubicaciones de SKU) - no versionados
@@ -24,8 +25,9 @@ rl-warehouse-agent/
 ├── notebooks/             Exploración y análisis de resultados
 ├── results/
 │   ├── figures/           Gráficas para los informes
-│   ├── models/            Tablas Q / modelos entrenados - no versionados
-│   └── logs/              Registros de entrenamiento - no versionados
+│   ├── models/            Q-tablas entrenadas (.npz y .csv)
+│   ├── logs/              Registros de entrenamiento y evaluación
+│   └── entrega1/          Lo mismo, con la especificación entregada en la Entrega 1
 ├── tests/                 Pruebas unitarias
 └── requirements.txt
 ```
@@ -34,7 +36,11 @@ rl-warehouse-agent/
 
 | Entrega | Contenido | Archivo |
 | --- | --- | --- |
-| 1 | Definición de estados, acciones y función de recompensa R(s, a, s') | [`docs/entrega1/entrega1_definicion_mdp.pdf`](docs/entrega1/entrega1_definicion_mdp.pdf) |
+| 1 | Definición de estados, acciones y función de recompensa R(s, a, s'), tal como se entregó | [`docs/entrega1/entrega1_definicion_mdp.pdf`](docs/entrega1/entrega1_definicion_mdp.pdf) |
+| Final | Reporte: implementación, cambios a la especificación y su justificación, entrenamiento y resultados | [`docs/entrega_final/reporte_final.pdf`](docs/entrega_final/reporte_final.pdf) |
+| Final | Q-tabla del agente (Q-learning) | [`results/models/q_learning.npz`](results/models/q_learning.npz) · [CSV legible](results/models/q_learning_qtable.csv) |
+| Final | Video de un turno del agente | [`results/figures/demo.mp4`](results/figures/demo.mp4) |
+| Final | Registros de las pruebas | [`results/logs/`](results/logs) · [`results/entrega1/logs/`](results/entrega1/logs) |
 
 ## Instalación con Conda
 
@@ -49,52 +55,43 @@ Para actualizar el ambiente tras cambios en sus dependencias:
 conda env update -f environment.yml
 ```
 
+## Uso
+
+```powershell
+python -m pytest                                    # 29 pruebas, incluidas las triplas (s, a, s') de la Entrega 1
+python experiments/train.py                         # entrena Q-learning, SARSA y Monte Carlo y los compara con reglas fijas
+python experiments/train.py --config configs/env_entrega1.yaml --out results/entrega1   # con la especificación entregada
+python experiments/compare_specs.py                 # especificación entregada frente a final
+python experiments/analyze_policy.py --model results/models/q_learning.npz --compare lote_mas_urgente
+python experiments/report_numbers.py                # cifras y tablas del reporte final
+python experiments/demo.py --model results/models/q_learning.npz   # carga la Q-tabla y graba el video
+```
+
+La Q-tabla se guarda con `TabularAgent.save(ruta)` y se carga con `TabularAgent.load(ruta)` (`src/rl_warehouse/agents/tabular.py`). Detalles, supuestos del simulador y protocolo experimental: [`docs/implementacion.md`](docs/implementacion.md).
+
 ## Compilar los documentos LaTeX
 
 ```bash
-cd docs/entrega1
-latexmk -pdf entrega1_definicion_mdp.tex     # o: pdflatex entrega1_definicion_mdp.tex (dos veces)
-latexmk -c                                   # limpia archivos auxiliares
+cd docs/entrega_final
+latexmk -pdf reporte_final.tex      # también docs/entrega1/entrega1_definicion_mdp.tex
+latexmk -c                          # limpia archivos auxiliares
 ```
 
-También se puede subir la carpeta `docs/entrega1` a Overleaf y compilar con pdfLaTeX.
+## Resultados (2 zonas)
 
-Los valores numéricos del documento (discretización y recompensas) están replicados en `configs/env_default.yaml`; si se cambia uno, hay que cambiar el otro.
+6 000 turnos de entrenamiento por algoritmo y evaluación greedy en 100 turnos de prueba, con las mismas semillas para agentes y reglas fijas. Promedios por turno de 8 h; ± es el intervalo de confianza del 95 %.
 
-## Simulador y entrenamiento
+| Política | Tipo | Recompensa | Vencidas | A tiempo | Pendientes al cierre | Viajes | WIP medio |
+|---|---|---|---|---|---|---|---|
+| **Q-learning** | RL | **−599** ± 339 | 33,9 ± 7,9 | 89,2 % | 6,7 | 80,6 | 62,3 |
+| SARSA | RL | −732 ± 331 | 33,5 ± 7,8 | 88,9 % | 7,9 | 77,1 | 64,5 |
+| Monte Carlo | RL | −2 433 ± 688 | 70,7 ± 14,6 | 77,7 % | 18,3 | 87,5 | 76,8 |
+| Lote más urgente | regla | −426 ± 307 | 33,8 ± 7,2 | 89,3 % | 5,6 | 90,7 | 58,1 |
+| Umbral de consolidación | regla | −561 ± 308 | 34,8 ± 7,4 | 88,9 % | 5,9 | 75,1 | 59,8 |
+| Lote más consolidado | regla | −1 390 ± 450 | 69,6 ± 12,6 | 79,3 % | 6,2 | 90,7 | 57,9 |
+| Aleatoria (agente sin entrenar) | regla | −7 322 ± 586 | 176,1 ± 12,6 | 46,1 % | 50,5 | 102,6 | 124,8 |
 
-Implementación ejecutable de Gymnasium, agentes Q-learning, SARSA y Monte Carlo, reglas fijas de referencia, pruebas y comparación reproducible. Consulta [instrucciones y supuestos](docs/implementacion.md).
-
-```powershell
-conda activate rl-warehouse-agent
-python -m pytest
-python experiments/train.py --zones AB --episodes 3000          # entrenar y comparar (versión de 2 zonas)
-python experiments/demo.py --zones AB --model results/models/q_learning.npz   # video del agente
-```
-
-| Script | Qué produce |
-| --- | --- |
-| `experiments/train.py` | Q-tablas (`results/models/*.npz` y `*_qtable.csv`), curvas de aprendizaje, comparación contra reglas fijas (`results/logs`, `results/figures`) |
-| `experiments/demo.py` | Carga una Q-tabla con `TabularAgent.load` y graba un turno como video (`results/figures/demo.mp4`) |
-
-## Resultados actuales (2 zonas)
-
-2 400 episodios por algoritmo (α = 0,05, γ = 0,95 por cada 2 min, ε de 0,5 a 0,02) y evaluación greedy en 20 turnos con las mismas semillas para agentes y reglas fijas. Valores por turno de 8 h; se reproducen con `python experiments/train.py --zones AB`.
-
-| Política | Tipo | Recompensa | A tiempo | Vencidas | Pendientes al cierre | Viajes |
-|---|---|---|---|---|---|---|
-| Lote de la zona más urgente | regla | −835 | 311 | 47 | 6 | 90 |
-| Umbral de consolidación | regla | −936 | 314 | 44 | 7 | 75 |
-| **Q-learning** | RL | **−1186** | 312 | 45 | 10 | 82 |
-| Lote de mayor consolidación | regla | −2002 | 269 | 89 | 8 | 90 |
-| SARSA | RL | −2160 | 277 | 79 | 11 | 79 |
-| Monte Carlo | RL | −2899 | 272 | 82 | 24 | 96 |
-| Aleatoria | regla | −8079 | 156 | 193 | 57 | 101 |
-
-Q-learning aprende una política del nivel de las mejores reglas fijas: vence una cantidad similar de órdenes con menos viajes, pero deja más órdenes pendientes al cierre. La desviación entre turnos es grande (unos ±1 400 de recompensa), así que con 20 turnos la diferencia frente a las dos mejores reglas no es concluyente. SARSA llegó a −1 000 a mitad del entrenamiento y luego se degradó: la curva oscila porque el estado agregado no distingue situaciones distintas (ver `docs/implementacion.md`).
+Q-learning pasa de 176 órdenes vencidas por turno sin entrenar a 33.9, el mismo nivel de servicio que la mejor regla fija, con 10 viajes menos por turno (diferencia pareada significativa). A cambio, mantiene unas 4 líneas más de WIP y en recompensa total queda por debajo de esa regla. Con la especificación entregada en la Entrega 1, el mismo algoritmo vence 78.6 órdenes por turno y la regla, 33.3: la recompensa entregada le enseñaba al agente a esperar con órdenes críticas. El reporte final explica cada cambio.
 
 ![Curvas de aprendizaje](results/figures/curvas_aprendizaje.png)
-![Comparación](results/figures/comparacion.png)
-
-Video de un turno del agente de Q-learning: [`results/figures/demo.mp4`](results/figures/demo.mp4). Las Q-tablas (`results/models`) y los registros (`results/logs`) no se versionan; `train.py` los regenera.
-
+![Especificación entregada frente a final](results/figures/comparacion_especificaciones.png)

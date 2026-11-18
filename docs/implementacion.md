@@ -1,30 +1,32 @@
-# Implementación del documento de Entrega 1
+# Implementación
 
-El entorno (`src/rl_warehouse/env/warehouse.py`) conserva las acciones, el orden del vector de observación, los umbrales y las recompensas del LaTeX (`docs/entrega1`). Los valores numéricos están en `configs/env_default.yaml`; si se cambia uno, hay que cambiar el otro. Las tablas Q son dispersas: solo se almacenan los estados visitados. Se implementan Q-learning, SARSA y Monte Carlo de primera visita con política epsilon-greedy, decaimiento de epsilon y máscara de acciones, además de seis reglas fijas de referencia (`src/rl_warehouse/agents/baselines.py`).
+El simulador (`src/rl_warehouse/env/warehouse.py`) implementa el MDP de la Entrega 1 (`docs/entrega1`, el PDF tal como se entregó). Los estados, la discretización y las acciones son exactamente los del documento. La función de recompensa y el avance del reloj existen en dos esquemas, seleccionables desde la configuración:
 
-## Supuestos que el documento no fija
+| Esquema | Configuración | Qué es |
+| --- | --- | --- |
+| `entrega1` | `configs/env_entrega1.yaml` | La especificación entregada, sin cambios: pago por consolidación y bono por urgencia en cada lote, −2 por zona saturada, reloj que salta hasta que un operario quede libre, γ = 0,99 por decisión. Las pruebas `test_entrega1_*` reproducen las triplas del cuadro 9 del PDF. |
+| `final` | `configs/env_default.yaml` | La especificación ajustada tras los experimentos: +2 por visita ahorrada y −1 por viaje, costo de WIP, −1 por zona crítica, descuido −10, reloj con avance máximo de Δt y descuento por tiempo. Es la que usa el agente entregado. |
 
-- **Demanda.** Proceso de Poisson no homogéneo con dos picos en el turno (`simulacion.perfil_demanda`: 0,3 órdenes/min en valle y 1,2 en pico). No llegan órdenes en los últimos 30 min (`corte_llegadas_min`), para que la penalización de cierre mida órdenes que se pudieron despachar.
-- **Órdenes.** Entre 1 y 6 líneas, zona uniforme, una unidad por línea y deadline entre 30 y 120 min desde la llegada. Cada zona tiene 30 SKU con popularidad Zipf (`zipf_s: 1.0`): pocos SKU concentran la demanda, como en una curva ABC, y por eso hay SKU repetidos entre órdenes.
-- **Tiempo de servicio.** 4 min de desplazamiento, 1 min por ubicación visitada y 0,2 min por línea (tomar y separar en la put-wall). Consolidar ahorra tiempo de verdad, no solo recompensa. No se modela la geometría de los pasillos.
-- **Operarios.** Tres durante todo el turno; no hay pausas ni ausencias.
-- **Órdenes urgentes.** URGENTE recoge todas las líneas aún no asignadas de la orden con menor holgura; las líneas ya en ejecución terminan con su operario original. Una orden se completa cuando terminan todas sus líneas. La holgura se estima con el tiempo de servicio de las líneas aún no terminadas.
-- **Vencimientos.** Las órdenes vencidas siguen disponibles para picking y solo se penalizan una vez. Completar exactamente en el deadline cuenta como a tiempo. Al cierre se cuentan también las órdenes en ejecución.
-- **Estado terminal.** Se codifica como vector de ceros con `terminated=True` y máscara vacía.
+La justificación de cada cambio, con la evidencia experimental, está en el reporte final (`docs/entrega_final`). Se implementan Q-learning, SARSA y Monte Carlo de primera visita (`src/rl_warehouse/agents/tabular.py`) con política ε-greedy, decaimiento de ε y máscara de acciones, además de seis reglas fijas de referencia (`src/rl_warehouse/agents/baselines.py`).
 
-## Por qué el reloj avanza como máximo Δt y el descuento es por tiempo
+## Supuestos del simulador (el documento no los fija)
 
-La primera versión dejaba que el reloj saltara hasta la siguiente finalización cuando un lote ocupaba al último operario libre (a veces más de 20 min). Con eso, todos los costos de ese intervalo (WIP, vencimientos) llegaban juntos y sin descontar en la recompensa del lote, mientras que, al esperar, los mismos costos llegaban repartidos en pasos de 2 min y descontados. Los agentes aprendían que esperar "costaba menos" y llegaban a tener más vencimientos que una política aleatoria. Por eso:
+- **Zonas.** Los experimentos usan la versión tabular de 2 zonas que propone la sección 2 de la Entrega 1 (9 409 estados). La de 4 zonas tiene 7,4 millones de estados (`--zones ABCD`).
+- **Demanda.** Proceso de Poisson no homogéneo con dos picos (`simulacion.perfil_demanda`: 0,3 órdenes/min en valle y 1,2 en pico). No llegan órdenes en los últimos 30 min (`corte_llegadas_min`), para que la penalización de cierre mida órdenes que se pudieron despachar.
+- **Órdenes.** Entre 1 y 6 líneas, zona uniforme, una unidad por línea y deadline entre 30 y 120 min desde la llegada. Cada zona tiene 30 SKU con popularidad Zipf (`zipf_s: 1.0`), como una curva ABC, y por eso hay SKU repetidos entre órdenes.
+- **Tiempo de servicio.** 4 min de desplazamiento, 1 min por ubicación visitada y 0,2 min por línea. Consolidar ahorra tiempo real, no solo recompensa.
+- **Operarios.** Tres durante todo el turno.
+- **Órdenes urgentes.** URGENTE recoge las líneas aún no asignadas de la orden con menor holgura; las líneas ya en ejecución terminan con su operario. La holgura se estima con el tiempo de servicio de las líneas no terminadas.
+- **Vencimientos y cierre.** Las órdenes vencidas siguen disponibles para picking y se penalizan una sola vez. Terminar exactamente en el deadline cuenta como a tiempo. Al cierre, n_pend cuenta las órdenes no completadas, incluidas las que están en ejecución.
+- **Estado terminal.** Vector de ceros con `terminated=True` y máscara vacía.
 
-1. El reloj avanza a lo sumo `delta_t_min` = 2 min por decisión. Con todos los operarios ocupados la única acción es ESPERAR.
-2. El descuento es por minuto transcurrido: `gamma ** (minutos / delta_t)`, con `gamma = 0.95` por cada 2 min. Las decisiones inmediatas (asignar varios operarios en el mismo instante) no se descuentan.
-3. Esperar nunca es gratis: hay un costo de WIP de −0,05 por línea pendiente sin asignar por minuto. Sin ese costo, ESPERAR en un estado que se repite parecía tener un valor casi nulo.
+## Protocolo experimental
 
-Con `gamma = 0.99` el aprendizaje diverge: el estado agregado no distingue cuánto han envejecido las órdenes dentro de cada rango de holgura (aliasing), y un horizonte largo amplifica ese error. Con 0.95 (unos 40 min de horizonte efectivo) es estable.
+`experiments/train.py` usa tres conjuntos de semillas disjuntos: entrenamiento (`seed·100 000 + i`), validación (500 000 + i: curva de aprendizaje y selección del mejor punto de control) y prueba (1 000 000 + i: evaluación final de agentes y reglas fijas, 100 turnos). Las evaluaciones son greedy, sin exploración. La Q-tabla guardada es la del punto de control con mejor recompensa en validación (`--last` guarda la del último episodio).
 
 ## Limitaciones
 
-La observación agregada omite identidades, trabajos en ejecución, la hora del turno y el tiempo restante de cada orden, así que hay aliasing de estados y el problema no es estrictamente de Markov. Los resultados son una base experimental, no evidencia de que una política entrenada mejore la operación real. La versión de 4 zonas tiene más de 7 millones de estados posibles; por eso los experimentos principales usan 2 zonas (`--zones AB`, 9 409 estados).
+La observación agregada omite la identidad de las órdenes, los trabajos en ejecución, la hora del turno y el tiempo restante de cada orden. Hay aliasing de estados: situaciones distintas comparten el mismo estado, así que el problema no es estrictamente de Markov y los métodos tabulares oscilan. Los resultados son una base experimental sobre un simulador, no evidencia de mejora en una operación real.
 
 ## Ejecución
 
@@ -34,19 +36,20 @@ Desde la raíz, con Python 3.10 o superior:
 conda env create -f environment.yml
 conda activate rl-warehouse-agent
 python -m pytest
-python experiments/train.py --zones AB                      # 2 400 episodios por algoritmo
-python experiments/demo.py --zones AB --model results/models/q_learning.npz
+python experiments/train.py                                                        # especificación final
+python experiments/train.py --config configs/env_entrega1.yaml --out results/entrega1   # especificación entregada
+python experiments/compare_specs.py
+python experiments/analyze_policy.py --model results/models/q_learning.npz --compare lote_mas_urgente --out results/logs/politica.md
+python experiments/demo.py --model results/models/q_learning.npz
 ```
-
-`train.py` usa las mismas semillas de evaluación para los tres algoritmos y las reglas fijas, sin exploración en la evaluación. Escribe en `results/`:
 
 | Archivo | Contenido |
 | --- | --- |
-| `models/<algoritmo>.npz` | Q-tabla e hiperparámetros; se carga con `TabularAgent.load` (también guarda los contadores de Monte Carlo, así que se puede seguir entrenando) |
-| `models/<algoritmo>_qtable.csv` | Q-tabla legible: cada estado desglosado y el valor Q de cada acción (0 en acciones que nunca se probaron en ese estado) |
-| `logs/training_<algoritmo>.csv` | Recompensa y métricas de cada episodio de entrenamiento |
-| `logs/learning_curve.csv` | Evaluación greedy periódica |
-| `logs/comparison.csv`, `logs/summary.md` | Evaluación final de agentes y reglas fijas |
-| `figures/curvas_aprendizaje.png`, `figures/comparacion.png` | Gráficas para el reporte |
-
-`demo.py` carga una Q-tabla, juega un turno con la política greedy y lo graba en `results/figures/demo.mp4` (o `.gif`). Con `--policy lote_mas_urgente` graba una regla fija para comparar, y con `--human` lo muestra en una ventana. Los archivos de configuración se cargan mediante una ruta explícita, sin depender de una instalación junto al código fuente.
+| `results/models/<algoritmo>.npz` | Q-tabla e hiperparámetros; `TabularAgent.load` la recupera (incluye los contadores de Monte Carlo para seguir entrenando) |
+| `results/models/<algoritmo>_qtable.csv` | Q-tabla legible: el estado desglosado y el valor Q de cada acción (0 en acciones nunca probadas en ese estado) |
+| `results/logs/training_<algoritmo>.csv` | Recompensa y métricas de cada episodio de entrenamiento |
+| `results/logs/learning_curve.csv` | Evaluación greedy periódica en validación |
+| `results/logs/comparison.csv`, `summary.md`, `summary.json` | Evaluación final en prueba de agentes y reglas fijas |
+| `results/logs/comparacion_especificaciones.md`, `politica.md` | Especificación entregada frente a final; política aprendida por situación |
+| `results/entrega1/` | Lo mismo, con la especificación entregada |
+| `results/figures/` | Curvas, comparaciones y el video del agente (`demo.mp4`) |
