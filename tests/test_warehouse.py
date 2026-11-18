@@ -133,3 +133,117 @@ def test_agents_complete_episode_and_roundtrip(algorithm, tmp_path):
     assert set(loaded.q) == set(agent.q)
     for key in agent.q:
         assert np.allclose(loaded.q[key], agent.q[key])
+
+
+# ---------------------------------------------------------------------------
+# Triplas (s, a, s') del PDF entregado en la Entrega 1 (cuadro 9), esquema "entrega1".
+# ---------------------------------------------------------------------------
+ENTREGA1 = "configs/env_entrega1.yaml"
+
+
+def entrega1(**sim):
+    import yaml
+    with open(ENTREGA1, encoding="utf-8") as stream:
+        config = yaml.safe_load(stream)
+    config["simulacion"] = {"ordenes_por_minuto": 0, **sim}
+    config["centro_distribucion"]["zonas"] = list("ABCD")      # las triplas del PDF usan 4 zonas
+    return WarehouseEnv(config)
+
+
+def critical_a_and_consolidable_b():
+    """s = (1,2,·,·|0,2,·,·|3,1,·,·|o,·): una orden crítica en A y 5 órdenes con el mismo SKU en B."""
+    orders = [Order(0, 0, 10, [Line(0, 1)])]
+    orders += [Order(i, 0, 300, [Line(1, 7)]) for i in range(1, 6)]
+    orders += [Order(6, 0, 300, [Line(1, 8), Line(1, 9), Line(1, 10)])]
+    return orders
+
+
+def test_entrega1_t1_lote_critico():
+    env = entrega1()
+    inject(env, critical_a_and_consolidable_b())
+    s = env._state()
+    assert list(s[[0, 1, 4, 5, 8, 9]]) == [1, 2, 0, 2, 3, 1]
+    _, reward, _, _, info = env.step(0)
+    assert reward == 1 + 8 and info["tau"] == 0          # P_c(0) + B_u(3), sin avance del reloj
+
+
+def test_entrega1_t1_alternativa_descuido():
+    env = entrega1()
+    inject(env, critical_a_and_consolidable_b())
+    _, reward, _, _, _ = env.step(1)                      # ir a B con A crítica
+    assert reward == 10 + 0 - 6                           # +4, como dice el texto bajo el cuadro 9
+
+
+def test_entrega1_t3_urgente_sin_urgencia():
+    env = entrega1()
+    inject(env, [Order(0, 0, 300, [Line(0, 1), Line(0, 2), Line(1, 3)]),
+                 Order(1, 0, 300, [Line(0, 1), Line(0, 4), Line(0, 5), Line(0, 6), Line(0, 7)])])
+    _, reward, _, _, info = env.step(env.urgent)
+    assert reward == -4 and info["tau"] == 0
+
+
+def test_entrega1_t4_esperar_con_critica():
+    env = entrega1()
+    inject(env, [Order(0, 0, 1, [Line(2, 1)])])
+    _, reward, _, _, info = env.step(env.wait)
+    assert reward == -10 - 20 and info["n_venc"] == 1
+
+
+def test_entrega1_t6_esperar_sin_operarios():
+    env = entrega1(operarios=1)
+    done = Order(0, 0, 300, [Line(1, 0, assigned=True)])
+    backlog = [Order(i, 0, 300, [Line(0, i)]) for i in range(1, 17)]
+    inject(env, [done] + backlog)
+    env.unassigned = 16
+    env.jobs = [(1.0, [(done, done.lines[0])])]
+    s = env._state()
+    assert s[0] == 3 and s[-2] == 0                       # A saturada, o = 0
+    _, reward, _, _, info = env.step(env.wait)
+    assert reward == 0 + 3 - 2 and info["n_ok"] == 1
+
+
+def test_entrega1_t8_cierre_con_pendientes():
+    env = entrega1(operarios=1, corte_llegadas_min=0)
+    env.shift = 2
+    busy = Order(0, 0, 300, [Line(1, 0, assigned=True)])
+    critical = Order(1, 0, 10, [Line(0, 1)])
+    inject(env, [busy, critical])
+    env.unassigned = 1
+    env.jobs = [(100.0, [(busy, busy.lines[0])])]
+    assert env._state()[8] == 3
+    _, reward, done, _, info = env.step(env.wait)
+    assert done and reward == -60 and info["n_pend"] == 2
+
+
+def test_entrega1_t9_accion_invalida():
+    env = entrega1()
+    inject(env, critical_a_and_consolidable_b())
+    state, reward, _, _, _ = env.step(2)                  # LOTE_C sin WIP en C
+    assert reward == -50 and np.array_equal(state, env._state())
+
+
+def test_entrega1_clock_jumps_to_completion():
+    env = entrega1(operarios=1)
+    inject(env, [Order(0, 0, 300, [Line(0, 1)])])
+    _, _, _, _, info = env.step(0)
+    assert env.time == pytest.approx(5.2) and info["n_ok"] == 1    # sin tope de Δt
+
+
+def test_final_t3_urgente_sin_urgencia():
+    env = quiet(operarios=1)
+    inject(env, [Order(0, 0, 300, [Line(0, 1), Line(0, 2), Line(1, 3)]),
+                 Order(1, 0, 400, [Line(0, i) for i in range(4, 10)])])
+    _, reward, _, _, info = env.step(env.urgent)
+    # -1 viaje, -4 sin urgencia; quedan 6 líneas en A durante Δt = 2 min: -0,6 de WIP.
+    assert reward == pytest.approx(-5.6) and info["tau"] == 1
+
+
+def test_evaluation_does_not_grow_qtable():
+    env = WarehouseEnv({"episodio": {"duracion_turno_min": 60}})
+    agent = TabularAgent(env.action_space.n)
+    agent.episode(env, seed=1, train=False)
+    assert len(agent.q) == 0
+    agent.episode(env, seed=1)
+    trained = len(agent.q)
+    agent.episode(env, seed=2, train=False)
+    assert len(agent.q) == trained > 0

@@ -1,12 +1,18 @@
-# Parámetros del ambiente (deben coincidir con docs/entrega1).
+# Especificación FINAL del ambiente (la que usa el agente entregado).
+# Estados y acciones: los de la Entrega 1. La recompensa y el avance del reloj se ajustaron
+# tras los experimentos; la justificación está en docs/entrega_final. La especificación
+# entregada en la Entrega 1 está en configs/env_entrega1.yaml.
 
 episodio:
   duracion_turno_min: 480      # 8 horas
-  delta_t_min: 2               # avance máximo del reloj con operarios libres
-  gamma: 0.95                  # por cada delta_t (descuento por tiempo transcurrido)
+  delta_t_min: 2               # avance máximo del reloj por decisión
+  reloj_max_delta: true        # true: el reloj nunca avanza más de delta_t por decisión
+  gamma: 0.95                  # factor de descuento por cada unidad_descuento_min
+  unidad_descuento_min: 2      # descuento por tiempo: gamma ** (minutos / 2); null = por decisión
 
 centro_distribucion:
-  zonas: [A, B, C, D]
+  # Versión tabular de 2 zonas (Entrega 1, sección 2: 9 409 estados). Para las 4 zonas: --zones ABCD.
+  zonas: [A, B]
   capacidad_carro_lineas: 20   # Cmax
 
 discretizacion:
@@ -17,6 +23,7 @@ discretizacion:
   llegadas_15min: [5, 15]          # lambda: <5 | 5-15 | >15
 
 recompensas:
+  esquema: final
   visita_ahorrada: 2               # por cada línea que no requiere una visita extra
   costo_viaje: -1                  # por cada lote o urgente despachado
   lote_descuido: -10               # LOTE_z con otra zona crítica y z no crítica

@@ -1,7 +1,8 @@
 """Entrena y compara agentes tabulares contra reglas fijas.
 
 Ejemplo:
-    python experiments/train.py --zones AB --episodes 2400 --eval-every 300
+    python experiments/train.py --zones AB                                    # especificación final
+    python experiments/train.py --zones AB --config configs/env_entrega1.yaml --out results/entrega1
 
 Salidas (todas en results/):
     models/<algoritmo>.npz          Q-tabla + hiperparámetros (TabularAgent.load la recupera)
@@ -28,8 +29,12 @@ sys.path.insert(0, str(ROOT / "src"))
 from rl_warehouse.agents import ALGORITHMS, POLICIES, TabularAgent, run_policy  # noqa: E402
 from rl_warehouse.env import WarehouseEnv  # noqa: E402
 
-EVAL_SEED = 1_000_000          # semillas de evaluación disjuntas de las de entrenamiento
-METRICS = ["reward", "arrived", "on_time", "expired", "pending", "saved_visits", "trips", "visits", "picked_lines"]
+# Tres conjuntos de semillas disjuntos: entrenamiento (seed * 100 000 + i), validación (curva de
+# aprendizaje y selección del mejor punto de control) y prueba (evaluación final de agentes y reglas).
+VALIDATION_SEED = 500_000
+EVAL_SEED = 1_000_000
+METRICS = ["reward", "arrived", "on_time", "expired", "pending", "saved_visits", "trips", "visits", "picked_lines",
+           "wip_line_min"]
 
 
 def load_config(path, zones):
@@ -40,8 +45,12 @@ def load_config(path, zones):
     return config
 
 
-def evaluate(agent, env, n):
-    return [agent.episode(env, seed=EVAL_SEED + i, train=False) for i in range(n)]
+def evaluate(agent, env, n, base=EVAL_SEED):
+    return [agent.episode(env, seed=base + i, train=False) for i in range(n)]
+
+
+def snapshot(agent):
+    return {k: v.copy() for k, v in agent.q.items()}
 
 
 def write_csv(path, rows):
@@ -53,9 +62,16 @@ def write_csv(path, rows):
 
 
 def summarize(rows):
+    """Promedios por turno, desviación e intervalo de confianza del 95 % de la media."""
     out = {k: float(np.mean([r[k] for r in rows])) for k in METRICS}
-    out["reward_std"] = float(np.std([r["reward"] for r in rows]))
+    half = 1.96 / np.sqrt(len(rows))
+    for key in ("reward", "expired", "on_time", "pending"):
+        std = float(np.std([r[key] for r in rows], ddof=1)) if len(rows) > 1 else 0.0
+        out[f"{key}_std"] = std
+        out[f"{key}_ci95"] = half * std
     out["visits_per_line"] = out["visits"] / max(out["picked_lines"], 1)
+    out["on_time_rate"] = out["on_time"] / max(out["arrived"], 1)
+    out["wip_mean"] = out["wip_line_min"] / 480
     return out
 
 
@@ -64,15 +80,18 @@ def main():
     parser.add_argument("--config", default=str(ROOT / "configs/env_default.yaml"))
     parser.add_argument("--zones", default="", help="Sobrescribe las zonas, p. ej. AB para la versión de 2 zonas")
     parser.add_argument("--algorithms", nargs="+", default=list(ALGORITHMS), choices=ALGORITHMS)
-    parser.add_argument("--episodes", type=int, default=2400)
-    parser.add_argument("--eval-episodes", type=int, default=20)
-    parser.add_argument("--eval-every", type=int, default=300)
+    parser.add_argument("--episodes", type=int, default=6000)
+    parser.add_argument("--eval-episodes", type=int, default=100, help="Turnos de la evaluación final")
+    parser.add_argument("--curve-episodes", type=int, default=20, help="Turnos por punto de la curva de aprendizaje")
+    parser.add_argument("--eval-every", type=int, default=500)
     parser.add_argument("--alpha", type=float, default=0.05)
     parser.add_argument("--epsilon", type=float, default=0.5, help="epsilon inicial")
     parser.add_argument("--epsilon-min", type=float, default=0.02)
     parser.add_argument("--time-unit", type=float, default=None,
-                        help="Minutos por factor gamma (descuento semi-Markov). Por defecto, delta_t del config")
+                        help="Minutos por factor gamma (descuento por tiempo). Por defecto, el del config")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--last", action="store_true",
+                        help="Guardar la Q-tabla del último episodio en vez del mejor punto de control en validación")
     parser.add_argument("--out", type=Path, default=ROOT / "results")
     parser.add_argument("--plot-only", action="store_true", help="Regenera las gráficas desde results/logs")
     args = parser.parse_args()
@@ -87,8 +106,10 @@ def main():
         parser.error("Los números de episodios deben ser positivos")
 
     config = load_config(args.config, args.zones)
-    gamma = config.get("episodio", {}).get("gamma", 0.99)
-    time_unit = args.time_unit or config.get("episodio", {}).get("delta_t_min", 2)
+    episode_cfg = config.get("episodio", {})
+    gamma = episode_cfg.get("gamma", 0.99)
+    # Minutos por factor gamma (descuento por tiempo); None = un factor gamma por decisión.
+    time_unit = args.time_unit if args.time_unit else episode_cfg.get("unidad_descuento_min")
     # epsilon llega a su mínimo al 80 % del entrenamiento.
     decay = (args.epsilon_min / args.epsilon) ** (1 / max(1, int(0.8 * args.episodes)))
     models, logs, figs = args.out / "models", args.out / "logs", args.out / "figures"
@@ -99,18 +120,31 @@ def main():
         agent = TabularAgent(env.action_space.n, algorithm, alpha=args.alpha, gamma=gamma, epsilon=args.epsilon,
                              epsilon_min=args.epsilon_min, epsilon_decay=decay, seed=args.seed, time_unit=time_unit)
         history, start = [], time.time()
+        best = dict(reward=-np.inf, episode=0, q=None)
+
+        def checkpoint(episode):
+            stats = summarize(evaluate(agent, env, args.curve_episodes, VALIDATION_SEED))
+            curve.append(dict(algorithm=algorithm, episode=episode, states=len(agent.q), **stats))
+            if episode > 0 and stats["reward"] > best["reward"]:
+                best.update(reward=stats["reward"], episode=episode, q=snapshot(agent))
+            print(json.dumps(dict(algorithm=algorithm, episode=episode, reward=round(stats["reward"], 1),
+                                  expired=round(stats["expired"], 1), states=len(agent.q),
+                                  minutes=round((time.time() - start) / 60, 1))), flush=True)
+
+        checkpoint(0)                                   # agente sin entrenar (Q = 0: acción al azar)
         for i in range(args.episodes):
             result = agent.episode(env, seed=args.seed * 100_000 + i)
             history.append(dict(episode=i + 1, epsilon=round(agent.epsilon, 4), **result))
             if (i + 1) % args.eval_every == 0 or i + 1 == args.episodes:
-                stats = summarize(evaluate(agent, env, args.eval_episodes))
-                curve.append(dict(algorithm=algorithm, episode=i + 1, states=len(agent.q), **stats))
-                print(json.dumps(dict(algorithm=algorithm, episode=i + 1, reward=round(stats["reward"], 1),
-                                      expired=round(stats["expired"], 1), states=len(agent.q),
-                                      minutes=round((time.time() - start) / 60, 1))), flush=True)
+                checkpoint(i + 1)
+        chosen = args.episodes
+        if not args.last and best["q"] is not None:
+            agent.q.clear()
+            agent.q.update(best["q"])
+            chosen = best["episode"]
         final = evaluate(agent, env, args.eval_episodes)
         comparison += [dict(policy=algorithm, kind="rl", episode=i, **r) for i, r in enumerate(final)]
-        summary[algorithm] = dict(kind="rl", states=len(agent.q), **summarize(final))
+        summary[algorithm] = dict(kind="rl", states=len(agent.q), checkpoint=chosen, **summarize(final))
         agent.save(models / f"{algorithm}.npz")
         write_csv(models / f"{algorithm}_qtable.csv", agent.to_table(env))
         write_csv(logs / f"training_{algorithm}.csv", history)
@@ -120,11 +154,16 @@ def main():
         rows = [run_policy(env, policy, EVAL_SEED + i) for i in range(args.eval_episodes)]
         comparison += [dict(policy=name, kind="regla", episode=i, steps=0, **r) for i, r in enumerate(rows)]
         summary[name] = dict(kind="regla", **summarize(rows))
+        # Referencia para la curva de aprendizaje: las mismas semillas de validación que la curva.
+        validation = [run_policy(env, policy, VALIDATION_SEED + i) for i in range(args.curve_episodes)]
+        summary[name]["validation_reward"] = float(np.mean([r["reward"] for r in validation]))
 
     write_csv(logs / "learning_curve.csv", curve)
     write_csv(logs / "comparison.csv", comparison)
-    meta = dict(config=str(args.config), zones=env.zones, episodes=args.episodes, eval_episodes=args.eval_episodes,
-                alpha=args.alpha, gamma=gamma, time_unit=time_unit, epsilon=[args.epsilon, args.epsilon_min])
+    meta = dict(config=str(Path(args.config).resolve().relative_to(ROOT)) if Path(args.config).resolve().is_relative_to(ROOT)
+                else str(args.config), scheme=env.scheme, zones=env.zones, episodes=args.episodes,
+                eval_episodes=args.eval_episodes, curve_episodes=args.curve_episodes, alpha=args.alpha, gamma=gamma,
+                time_unit=time_unit, epsilon=[args.epsilon, args.epsilon_min], seed=args.seed)
     (logs / "summary.json").write_text(json.dumps(dict(meta=meta, results=summary), indent=2), encoding="utf-8")
     write_markdown(logs / "summary.md", meta, summary)
     plot(curve, summary, figs)
@@ -132,14 +171,15 @@ def main():
 
 
 def write_markdown(path, meta, summary):
-    lines = [f"# Resultados ({len(meta['zones'])} zonas, {meta['episodes']} episodios, "
-             f"{meta['eval_episodes']} episodios de evaluación)", "",
-             "| Política | Tipo | Recompensa | Desv. | A tiempo | Vencidas | Pendientes | Visitas ahorradas | Viajes | Visitas/línea |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+    lines = [f"# Resultados: esquema {meta['scheme']}, {len(meta['zones'])} zonas, {meta['episodes']} episodios "
+             f"de entrenamiento, {meta['eval_episodes']} turnos de evaluación", "",
+             "Promedios por turno de 8 h; ± es el intervalo de confianza del 95 % de la media.", "",
+             "| Política | Tipo | Recompensa | A tiempo | Vencidas | Pendientes al cierre | Visitas/línea | Viajes | WIP medio (líneas) |",
+             "|---|---|---|---|---|---|---|---|---|"]
     for name, s in sorted(summary.items(), key=lambda kv: -kv[1]["reward"]):
-        lines.append(f"| {name} | {s['kind']} | {s['reward']:.1f} | {s['reward_std']:.1f} | {s['on_time']:.1f} | "
-                     f"{s['expired']:.1f} | {s['pending']:.1f} | {s['saved_visits']:.1f} | {s['trips']:.1f} | "
-                     f"{s['visits_per_line']:.3f} |")
+        lines.append(f"| {name} | {s['kind']} | {s['reward']:.0f} ± {s['reward_ci95']:.0f} | {s['on_time']:.1f} | "
+                     f"{s['expired']:.1f} ± {s['expired_ci95']:.1f} | {s['pending']:.1f} | {s['visits_per_line']:.3f} | "
+                     f"{s['trips']:.1f} | {s['wip_mean']:.1f} |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -152,7 +192,9 @@ def plot(curve, summary, figs):
     figs.mkdir(parents=True, exist_ok=True)
     ink, muted, grid = "#1F2933", "#6B7280", "#E5E7EB"
     colors = {"q_learning": "#2a78d6", "sarsa": "#eb6834", "monte_carlo": "#1baf7a"}
-    labels = {"q_learning": "Q-learning", "sarsa": "SARSA", "monte_carlo": "Monte Carlo"}
+    labels = {"q_learning": "Q-learning", "sarsa": "SARSA", "monte_carlo": "Monte Carlo",
+              "lote_mas_urgente": "Lote más urgente", "umbral_consolidacion": "Umbral de consolidación",
+              "lote_mas_consolidado": "Lote más consolidado", "aleatoria": "Aleatoria"}
     rules = {k: v for k, v in summary.items() if v["kind"] == "regla" and k != "esperar_siempre"}
     best_rule = max(rules, key=lambda k: rules[k]["reward"])
 
@@ -165,10 +207,10 @@ def plot(curve, summary, figs):
         ax.plot(x, y, color=colors[algorithm], lw=2, marker="o", ms=4, label=labels[algorithm])
         ax.annotate(labels[algorithm], (x[-1], y[-1]), xytext=(6, 0), textcoords="offset points",
                     va="center", fontsize=9, color=ink)
-    ax.axhline(rules[best_rule]["reward"], color=muted, lw=1.5, ls="--",
-               label=f"Mejor regla fija ({best_rule})")
+    reference = rules[best_rule].get("validation_reward", rules[best_rule]["reward"])
+    ax.axhline(reference, color=muted, lw=1.5, ls="--", label=f"Mejor regla fija ({labels.get(best_rule, best_rule).lower()})")
     ax.set_xlabel("Episodios de entrenamiento", color=ink)
-    ax.set_ylabel("Recompensa media por turno (evaluación greedy)", color=ink)
+    ax.set_ylabel("Recompensa media por turno (validación, greedy)", color=ink)
     ax.set_title("Curvas de aprendizaje", loc="left", fontsize=13, color=ink, weight="bold")
     ax.grid(axis="y", color=grid, lw=0.8)
     ax.spines[["top", "right"]].set_visible(False)

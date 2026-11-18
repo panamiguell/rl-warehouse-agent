@@ -33,13 +33,18 @@ class TabularAgent:
         self.episodes_trained = 0
 
     # ------------------------------------------------------------- política
+    def values(self, state):
+        """Valores Q de un estado sin insertarlo en la tabla (ceros si nunca se actualizó)."""
+        key = tuple(int(x) for x in state)
+        return self.q[key] if key in self.q else np.zeros(self.n_actions)
+
     def act(self, state, mask, explore=True):
         actions = np.flatnonzero(mask)
         if not len(actions):
             raise ValueError("No hay acciones aplicables")
         if explore and self.rng.random() < self.epsilon:
             return int(self.rng.choice(actions))
-        values = self.q[tuple(state)][actions]
+        values = self.values(state)[actions]
         return int(self.rng.choice(actions[values == values.max()]))
 
     def greedy(self, state, mask):
@@ -66,9 +71,9 @@ class TabularAgent:
                 if done:
                     future = 0.0
                 elif self.algorithm == "sarsa":
-                    future = self.q[tuple(nxt)][next_action]
+                    future = self.values(nxt)[next_action]
                 else:
-                    future = self.q[tuple(nxt)][next_info["action_mask"]].max()
+                    future = self.values(nxt)[next_info["action_mask"]].max()
                 self.q[key][action] += self.alpha * (reward + discount * future - self.q[key][action])
             total += reward
             if done:

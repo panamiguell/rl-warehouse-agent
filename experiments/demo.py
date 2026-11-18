@@ -4,6 +4,8 @@ Ejemplos:
     python experiments/demo.py --model results/models/q_learning.npz
     python experiments/demo.py --policy lote_mas_urgente          # una regla fija, para comparar
     python experiments/demo.py --model results/models/q_learning.npz --human   # ventana en vivo
+    python experiments/demo.py --config configs/env_entrega1.yaml --model results/entrega1/models/q_learning.npz \
+        --output results/figures/demo_entrega1.mp4                 # agente de la especificación entregada
 
 Requiere ffmpeg para .mp4; con --output *.gif usa Pillow.
 """
@@ -24,7 +26,7 @@ from rl_warehouse.env import WarehouseEnv  # noqa: E402
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default=str(ROOT / "configs/env_default.yaml"))
-    parser.add_argument("--zones", default="", help="Debe coincidir con las zonas usadas al entrenar")
+    parser.add_argument("--zones", default="", help="Sobrescribe las zonas del config; deben ser las del entrenamiento")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--model", type=Path, help="Q-tabla guardada con TabularAgent.save (.npz)")
     group.add_argument("--policy", choices=list(POLICIES), help="Regla fija en lugar de un agente")

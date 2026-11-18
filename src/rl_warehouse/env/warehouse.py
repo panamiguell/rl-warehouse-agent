@@ -1,8 +1,14 @@
 """Simulador por eventos de consolidación de picking.
 
-La definición formal (estados, acciones, transiciones y R(s, a, s')) está en
-docs/entrega1/entrega1_definicion_mdp.pdf; los valores numéricos, en
-configs/env_default.yaml. Los supuestos de simulación están en docs/implementacion.md.
+Estados y acciones: docs/entrega1/entrega1_definicion_mdp.pdf (Entrega 1).
+Hay dos esquemas de recompensa y avance del reloj, seleccionables en la configuración:
+
+- ``entrega1`` (configs/env_entrega1.yaml): la especificación entregada el 4 de noviembre,
+  con pago por consolidación y bono por urgencia en cada lote, y el reloj saltando hasta
+  que un operario quede libre.
+- ``final`` (configs/env_default.yaml): la especificación ajustada tras los experimentos,
+  con pago por visitas ahorradas, costo de WIP y avance máximo de Δt por decisión. La
+  justificación está en docs/entrega_final.
 """
 from collections import deque
 from copy import deepcopy
@@ -33,8 +39,8 @@ class Order:
     completed: bool = False
 
 
-# Valores por defecto: los mismos de configs/env_default.yaml.
-DEFAULT_REWARDS = {
+# Valores por defecto de cada esquema (los mismos de los archivos en configs/).
+REWARDS_FINAL = {
     "visita_ahorrada": 2,
     "costo_viaje": -1,
     "lote_descuido": -10,
@@ -54,6 +60,30 @@ DEFAULT_REWARDS = {
     "accion_invalida": -50,
     "orden_pendiente_fin_turno": -30,
 }
+
+# Especificación de la Entrega 1 (secciones 4.1 a 4.3 del PDF entregado).
+REWARDS_ENTREGA1 = {
+    "lote_consolidacion": {0: 1, 1: 5, 2: 10},     # P_c(c_z)
+    "lote_bono_urgencia": {1: 0, 2: 3, 3: 8},       # B_u(u_z)
+    "lote_descuido": -6,
+    "urgente": {1: -4, 2: 1, 3: 8},                 # según u_max
+    "esperar": {
+        "sin_alternativa": 0,
+        "sin_trabajo": 0,
+        "con_orden_critica": -10,
+        "consolidar_alta_demanda": 2,
+        "sin_llegadas": -3,
+        "ocioso": -1,
+    },
+    "orden_a_tiempo": 3,
+    "orden_vencida": -20,
+    "zona_saturada": -2,
+    "accion_invalida": -50,
+    "orden_pendiente_fin_turno": -30,
+}
+
+SCHEMES = {"final": REWARDS_FINAL, "entrega1": REWARDS_ENTREGA1}
+DEFAULT_REWARDS = REWARDS_FINAL
 
 
 class WarehouseEnv(gym.Env):
@@ -103,10 +133,19 @@ class WarehouseEnv(gym.Env):
         self.max_rate = max(r for _, r in self.profile)
         weights = 1.0 / np.arange(1, self.skus + 1) ** self.zipf
         self.sku_p = weights / weights.sum()
-        self.rewards = deepcopy(DEFAULT_REWARDS)
-        user = self.config.get("recompensas", {})
-        self.rewards.update({k: v for k, v in user.items() if k != "esperar"})
-        self.rewards["esperar"].update(user.get("esperar", {}))
+        user = dict(self.config.get("recompensas", {}))
+        self.scheme = user.pop("esquema", "final")
+        if self.scheme not in SCHEMES:
+            raise ValueError(f"Esquema de recompensa desconocido: {self.scheme}")
+        self.rewards = deepcopy(SCHEMES[self.scheme])
+        for key, value in user.items():
+            if isinstance(value, dict) and isinstance(self.rewards.get(key), dict):
+                self.rewards[key].update({(int(k) if str(k).isdigit() else k): v for k, v in value.items()})
+            else:
+                self.rewards[key] = value
+        # Avance del reloj tras asignar el último operario libre: a lo sumo Δt (final)
+        # o hasta que un operario quede libre (Entrega 1).
+        self.clock_cap = ep.get("reloj_max_delta", self.scheme == "final")
         d = self.config.get("discretizacion", {})
         self.w_bins = d.get("wip_lineas", [0, 5, 15])[1:]
         self.c_bins = d.get("consolidacion_ordenes", [1, 4])
@@ -134,7 +173,7 @@ class WarehouseEnv(gym.Env):
         self.last_action = None
         self.last_reward = 0.0
         self.stats = dict(arrived=0, completed=0, on_time=0, expired=0, pending=0,
-                          visits=0, picked_lines=0, saved_visits=0, trips=0)
+                          visits=0, picked_lines=0, saved_visits=0, trips=0, wip_line_min=0.0)
         self.next_arrival = self._next_arrival()
         return self._state(), self._info()
 
@@ -214,9 +253,15 @@ class WarehouseEnv(gym.Env):
         r = self.rewards
         c, u = s[self.n:2 * self.n], s[2 * self.n:3 * self.n]
         umax = max(u)
-        if action < self.n:
-            return r["costo_viaje"] + (r["lote_descuido"] if umax == 3 and u[action] < 3 else 0)
-        if action == self.urgent:
+        neglect = r["lote_descuido"] if umax == 3 and action < self.n and u[action] < 3 else 0
+        if self.scheme == "entrega1":
+            if action < self.n:
+                return r["lote_consolidacion"][int(c[action])] + r["lote_bono_urgencia"][int(u[action])] + neglect
+            if action == self.urgent:
+                return r["urgente"][int(umax)]
+        elif action < self.n:
+            return r["costo_viaje"] + neglect
+        elif action == self.urgent:
             return r["costo_viaje"] + (r["urgente_sin_urgencia"] if umax == 1 else 0)
         e = r["esperar"]
         if s[-2] == 0:
@@ -306,19 +351,28 @@ class WarehouseEnv(gym.Env):
         self.wip_area = 0.0
         if action == self.wait or not free or not self._pending():
             completion = min((t for t, _ in self.jobs), default=float("inf"))
-            # El reloj avanza a lo sumo Δt por decisión (o hasta que un operario quede libre),
-            # de modo que cada transición acumula costos de un intervalo corto y comparable.
-            ok, expired = self._advance(min(self.shift, completion, self.time + self.delta))
+            # Esquema final: el reloj avanza a lo sumo Δt por decisión (o hasta que un operario
+            # quede libre), de modo que cada transición acumula costos de un intervalo comparable.
+            # Entrega 1: tras asignar, el reloj salta hasta que un operario quede libre.
+            capped = action == self.wait or self.clock_cap
+            ok, expired = self._advance(min(self.shift, completion, self.time + self.delta) if capped
+                                        else min(self.shift, completion))
         tau = self.time > before
         self.terminated = self.time >= self.shift
         pending = len(self.open) if self.terminated else 0
         next_state = self._state()
-        # Penalización por zona crítica en s', solo si avanzó el reloj y s' no es el cierre.
-        critical = int(sum(next_state[2 * self.n:3 * self.n] == 3)) if tau and not self.terminated else 0
         self.stats["pending"] = pending
-        reward += (r["visita_ahorrada"] * saved + r["orden_a_tiempo"] * ok + r["orden_vencida"] * expired
-                   + r["linea_pendiente_min"] * self.wip_area + r["zona_critica"] * critical
+        self.stats["wip_line_min"] += self.wip_area
+        # Penalizaciones por zona en s', solo si avanzó el reloj y s' no es el cierre.
+        live = tau and not self.terminated
+        reward += (r["orden_a_tiempo"] * ok + r["orden_vencida"] * expired
                    + r["orden_pendiente_fin_turno"] * pending)
+        if self.scheme == "entrega1":
+            reward += r["zona_saturada"] * (int(sum(next_state[:self.n] == 3)) if live else 0)
+        else:
+            critical = int(sum(next_state[2 * self.n:3 * self.n] == 3)) if live else 0
+            reward += (r["visita_ahorrada"] * saved + r["linea_pendiente_min"] * self.wip_area
+                       + r["zona_critica"] * critical)
         self.last_action, self.last_reward = action, float(reward)
         events = dict(n_ok=ok, n_venc=expired, n_pend=pending, n_ahorr=saved, wip_min=self.wip_area, tau=int(tau))
         if self.render_mode == "human":
