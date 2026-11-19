@@ -226,8 +226,8 @@ En resumen, $A(s)$ es:
 \[
 A(s)=\begin{cases}
 \emptyset & \text{si } s\in\{\META,\COL\}\\[2pt]
-\{\IZQ,\DER\} & \text{si } \mathrm{fr}(f,c,\theta)\ \text{está fuera del cuarto}\\[2pt]
-A & \text{en cualquier otro caso.}
+\{\IZQ,\DER\} & \text{si la casilla de enfrente está fuera del cuarto}\\[2pt]
+\{\IZQ,\DER,\AV\} & \text{en cualquier otro caso.}
 \end{cases}
 \]
 Por ejemplo, en el estado inicial (agente en $(0,0)$ mirando al norte) solo puede girar. $A(s)$ depende solo
