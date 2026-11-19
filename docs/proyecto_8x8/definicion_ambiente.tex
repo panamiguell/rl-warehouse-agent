@@ -123,11 +123,14 @@ agente mientras gira, también hay colisión.
 
 \subsection{Estado completo del ambiente}
 
-Un estado no terminal es
+El conjunto de estados es la unión de los estados en curso y los dos estados terminales:
 \[
-  s = (f,\ c,\ \theta,\ o_1,\ o_2,\ o_3,\ o_4,\ o_5),
+  S = S_{\mathrm{N}} \cup \{\META,\ \COL\},\qquad
+  S_{\mathrm{N}} = \{(f,\ c,\ \theta,\ o_1,\ o_2,\ o_3,\ o_4,\ o_5)\},
 \]
-con las variables del cuadro~\ref{tab:estado}.
+donde cada estado en curso tiene las variables del cuadro~\ref{tab:estado}; el estado inicial $s_0$ es uno de
+ellos. Las posiciones de la salida $(0,0)$ y de la meta $(7,7)$ son fijas en todos los episodios: no cambian,
+así que son parámetros del ambiente y no variables del estado.
 
 \begin{table}[H]
 \centering\small
@@ -144,13 +147,28 @@ $o_i=(f_i,c_i)$, $i=1..5$ & Posición de cada obstáculo & Entero, $\{0,\dots,7\
 \label{tab:estado}
 \end{table}
 
+El cuadro~\ref{tab:tipos} muestra los cuatro tipos de estado: el inicial, los estados en curso y los dos
+terminales, uno por cumplir el objetivo y otro por chocar.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{2.5cm}P{5.2cm}P{2.1cm}L@{}}
+\toprule
+\textbf{Tipo de estado} & \textbf{Cuándo ocurre} & \textbf{Acciones $A(s)$} & \textbf{Qué implica} \\
+\midrule
+Inicial $s_0$ & Al empezar cada episodio: agente en $(0,0)$ mirando al norte; obstáculos en 5 casillas distintas al azar, ninguna en $(0,0)$ ni en $(7,7)$ & $\IZQ$, $\DER$ & Es un estado en curso más \\
+En curso, $s\in S_{\mathrm{N}}$ & El agente está en una casilla distinta de $(7,7)$ y no ha chocado & Según la sección 3 & El episodio continúa; cada paso o giro cuesta $-1$ \\
+Meta: llegada, $\META$ & El agente entra en $(7,7)$ sin chocar: \textbf{cumplió el objetivo} & Ninguna & Terminal. Se recibe $+100$ al entrar y el episodio termina con éxito \\
+Colisión, $\COL$ & El agente y un obstáculo terminan en la misma casilla o se cruzan, al avanzar o al girar & Ninguna & Terminal. Se recibe $-100$ al entrar y el episodio termina sin éxito \\
+\bottomrule
+\end{tabularx}
+\caption{Tipos de estado. En los dos terminales no hay acciones y su valor es $V(\META)=V(\COL)=0$.}
+\label{tab:tipos}
+\end{table}
+
 \begin{itemize}
-  \item \textbf{Estado inicial} $s_0$: el agente en el inicio $(0,0)$ mirando al norte; los cinco obstáculos en
-    casillas distintas elegidas al azar entre todas, excepto $(0,0)$ y $(7,7)$.
-  \item \textbf{Meta}: la casilla $(7,7)$ es fija. Como los obstáculos tampoco cambian de número, los cinco
-    siempre forman parte del estado.
-  \item \textbf{Estados terminales}: $\META$ (el agente llegó a $(7,7)$ sin chocar) y $\COL$ (el agente chocó
-    con un obstáculo). En ambos el episodio termina y no hay acciones.
+  \item \textbf{Llegar a la meta y chocar no pueden ocurrir a la vez}, porque los obstáculos nunca entran en
+    $(7,7)$. Por eso los dos terminales están bien definidos.
   \item \textbf{Tamaño}: con el agente en la salida los obstáculos ocupan 5 de 62 casillas, y en cualquier otra
     casilla, 5 de 61. Hay $4\big[\binom{62}{5}+62\binom{61}{5}\big]=1\,501\,272\,464$ estados no terminales,
     más los 2 terminales. Los obstáculos son intercambiables, así que se cuentan como un conjunto.
@@ -169,8 +187,12 @@ posición y su orientación,
 \[
   x(s) = (f,\ c,\ \theta),
 \]
-y esa es la clave de su Q-tabla: $8\cdot8\cdot4=256$ filas (252 no terminales, porque $(7,7)$ es la meta)
-por 3 acciones.
+y esa es la clave de su Q-tabla: $8\cdot8\cdot4=256$ combinaciones, de las cuales 252 corresponden a estados
+en curso (las 4 con el agente en $(7,7)$ son la meta). Los terminales $\META$ y $\COL$ también se observan: el
+agente sabe que llegó o que chocó porque el episodio termina. No se guardan en la Q-tabla porque su valor es
+0 por definición: al actualizar $Q(x,a)$ con una transición que termina en $\META$ o $\COL$, el valor futuro
+es 0 y solo cuenta la recompensa ($+100$ o $-100$). En el código, el indicador \code{terminated} de Gymnasium
+marca estos dos estados.
 
 Los obstáculos siguen siendo parte del estado del ambiente: determinan las transiciones y las recompensas. El
 agente los ``siente'' a través de las colisiones: cada vez que una acción en una casilla termina en choque,
