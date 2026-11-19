@@ -132,6 +132,24 @@ donde cada estado en curso tiene las variables del cuadro~\ref{tab:estado}; el e
 ellos. Las posiciones de la salida $(0,0)$ y de la meta $(7,7)$ son fijas en todos los episodios: no cambian,
 así que son parámetros del ambiente y no variables del estado.
 
+\textbf{Definición de los estados terminales.} $\META$ y $\COL$ no tienen variables: al terminar el episodio ya no
+importa dónde quedaron el agente ni los obstáculos, porque no hay más acciones ni recompensas. Cada uno se define
+por la condición que hace entrar en él. Sea $s=(f,c,\theta,o_1,\dots,o_5)$ el estado antes del paso y sean
+$(f',c')$, $\theta'$ y $o_1',\dots,o_5'$ la posición y la orientación del agente y las posiciones de los
+obstáculos después de que el agente aplica su acción y los obstáculos se mueven. Entonces
+\[
+  s'=\begin{cases}
+    \COL & \text{si existe } i \text{ con } o_i'=(f',c') \text{ (misma casilla)}\\
+         & \text{o con } o_i'=(f,c) \text{ y } o_i=(f',c') \text{ (se cruzaron)},\\[2pt]
+    \META & \text{si no hay colisión y } (f',c')=(7,7),\\[2pt]
+    (f',c',\theta',o_1',\dots,o_5')\in S_{\mathrm{N}} & \text{en otro caso.}
+  \end{cases}
+\]
+La primera condición cubre las tres formas de chocar: avanzar hacia un obstáculo que se queda, cruzarse con
+él, y que un obstáculo entre en la casilla del agente mientras gira (en ese caso $(f',c')=(f,c)$). En los
+dos terminales $A(\META)=A(\COL)=\emptyset$ y $V(\META)=V(\COL)=0$; la recompensa se recibe al entrar:
+$+100$ en $\META$ y $-100$ en $\COL$.
+
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{1.9cm}P{4.2cm}P{2.6cm}L@{}}
