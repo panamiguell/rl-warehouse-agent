@@ -25,13 +25,14 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from rl_gridworld import ACTION_NAMES, ALGORITHMS, ObstacleGridEnv, TabularAgent  # noqa: E402
-from rl_gridworld.baselines import POLICIES, run_policy  # noqa: E402
+from rl_gridworld.baselines import policies_for, run_policy  # noqa: E402
 
 # Semillas disjuntas: entrenamiento (0..N), validación y prueba.
 VALIDATION_SEED = 500_000
 TEST_SEED = 1_000_000
-LABELS = {"q_learning": "Q-learning", "sarsa": "SARSA", "cautelosa": "Regla cautelosa",
-          "directa": "Regla directa", "aleatoria": "Aleatoria (sin entrenar)"}
+LABELS = {"q_learning": "Q-learning", "sarsa": "SARSA", "borde": "Regla: por el borde",
+          "escalera": "Regla: escalera por el centro", "cautelosa": "Regla cautelosa (con sensores)",
+          "aleatoria": "Aleatoria (sin entrenar)"}
 
 
 def summarize(rows):
@@ -62,13 +63,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default=str(ROOT / "configs/cuarto_8x8.yaml"))
     parser.add_argument("--algorithms", nargs="+", default=list(ALGORITHMS), choices=ALGORITHMS)
-    parser.add_argument("--episodes", type=int, default=200_000)
-    parser.add_argument("--eval-every", type=int, default=20_000)
+    parser.add_argument("--episodes", type=int, default=None, help="Por defecto, el del config")
+    parser.add_argument("--eval-every", type=int, default=None, help="Por defecto, episodios / 10")
     parser.add_argument("--validation-episodes", type=int, default=500)
     parser.add_argument("--test-episodes", type=int, default=2_000)
-    parser.add_argument("--out", type=Path, default=ROOT / "results/cuarto_8x8")
+    parser.add_argument("--out", type=Path, default=None, help="Por defecto, la carpeta del config (salida)")
     parser.add_argument("--plot-only", action="store_true")
     args = parser.parse_args()
+    config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    args.out = args.out or ROOT / config.get("salida", "results/cuarto_8x8")
     logs, models, figs = args.out / "logs", args.out / "models", args.out / "figures"
     if args.plot_only:
         summary = json.loads((logs / "summary.json").read_text(encoding="utf-8"))
@@ -77,16 +80,18 @@ def main():
         plot(curve, summary["results"], figs)
         return
 
-    config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     hp = config.get("entrenamiento", {})
+    args.episodes = args.episodes or hp.get("episodios", 100_000)
+    args.eval_every = args.eval_every or max(1, args.episodes // 10)
     env = ObstacleGridEnv(config.get("ambiente", {}))
     eps0, eps_min = hp.get("epsilon_inicial", 1.0), hp.get("epsilon_minimo", 0.05)
     decay = (eps_min / eps0) ** (1 / max(1, int(0.8 * args.episodes)))
     curve, comparison, summary = [], [], {}
 
     for algorithm in args.algorithms:
-        agent = TabularAgent(3, algorithm, alpha=hp.get("alpha", 0.05), gamma=hp.get("gamma", 0.95),
-                             epsilon=eps0, epsilon_min=eps_min, epsilon_decay=decay, seed=hp.get("semilla", 0))
+        agent = TabularAgent(3, algorithm, alpha=hp.get("alpha_minima", 0.01), gamma=hp.get("gamma", 0.99),
+                             epsilon=eps0, epsilon_min=eps_min, epsilon_decay=decay, seed=hp.get("semilla", 0),
+                             alpha_power=hp.get("alpha_potencia", 0.7))
         best = dict(success=-1.0, episode=0, q=None)
         history, window, start = [], [], time.time()
 
@@ -119,7 +124,7 @@ def main():
         write_csv(models / f"{algorithm}_qtable.csv", agent.to_rows(ACTION_NAMES))
         write_csv(logs / f"training_{algorithm}.csv", history)
 
-    for name, policy in POLICIES.items():
+    for name, policy in policies_for(env).items():
         rows = [run_policy(env, policy, TEST_SEED + i) for i in range(args.test_episodes)]
         comparison += [dict(policy=name, episode=i, **r) for i, r in enumerate(rows)]
         validation = [run_policy(env, policy, VALIDATION_SEED + i) for i in range(args.validation_episodes)]
@@ -127,7 +132,7 @@ def main():
 
     write_csv(logs / "learning_curve.csv", curve)
     write_csv(logs / "comparison.csv", comparison)
-    meta = dict(episodes=args.episodes, validation_episodes=args.validation_episodes,
+    meta = dict(config=str(Path(args.config).resolve().relative_to(ROOT)), episodes=args.episodes, validation_episodes=args.validation_episodes,
                 test_episodes=args.test_episodes, epsilon=[eps0, eps_min], **hp, ambiente=config.get("ambiente", {}))
     (logs / "summary.json").write_text(json.dumps(dict(meta=meta, results=summary), indent=2), encoding="utf-8")
     lines = [f"# Resultados en el cuarto 8x8 ({args.test_episodes} episodios de prueba)", "",
@@ -152,6 +157,7 @@ def plot(curve, summary, figs):
     ink, muted, grid = "#1F2933", "#6B7280", "#E5E7EB"
     colors = {"q_learning": "#2a78d6", "sarsa": "#eb6834"}
     fig, ax = plt.subplots(figsize=(9, 5), dpi=150)
+    ends = {}
     for algorithm, color in colors.items():
         pts = [c for c in curve if c["algorithm"] == algorithm]
         if not pts:
@@ -159,9 +165,16 @@ def plot(curve, summary, figs):
         x = [p["episode"] / 1000 for p in pts]
         y = [100 * p["success"] for p in pts]
         ax.plot(x, y, color=color, lw=2, marker="o", ms=4, label=LABELS[algorithm])
-        ax.annotate(LABELS[algorithm], (x[-1], y[-1]), xytext=(6, 0), textcoords="offset points",
+        ends[algorithm] = (x[-1], y[-1])
+    if len(ends) == 2:                                   # separa las etiquetas finales si se enciman
+        (xa, ya), (xb, yb) = ends["q_learning"], ends["sarsa"]
+        if abs(ya - yb) < 5:
+            mid = (ya + yb) / 2
+            ends["q_learning"], ends["sarsa"] = (xa, mid + 3 if ya >= yb else mid - 3), (xb, mid - 3 if ya >= yb else mid + 3)
+    for algorithm, (x_end, y_end) in ends.items():
+        ax.annotate(LABELS[algorithm], (x_end, y_end), xytext=(6, 0), textcoords="offset points",
                     va="center", fontsize=9, color=ink)
-    for rule, style in (("cautelosa", "--"), ("directa", ":")):
+    for rule, style in (("borde", "--"), ("escalera", ":"), ("cautelosa", "-.")):
         if rule in summary:
             ax.axhline(100 * summary[rule]["validation_success"], color=muted, lw=1.5, ls=style, label=LABELS[rule])
     ax.set_xlabel("Episodios de entrenamiento (miles)", color=ink)
@@ -176,11 +189,11 @@ def plot(curve, summary, figs):
     fig.savefig(figs / "curvas_aprendizaje.png")
     plt.close(fig)
 
-    order = [k for k in ("q_learning", "sarsa", "cautelosa", "directa", "aleatoria") if k in summary]
+    order = [k for k in ("q_learning", "sarsa", "borde", "escalera", "cautelosa", "aleatoria") if k in summary]
     fig, ax = plt.subplots(figsize=(9, 3.8), dpi=150)
     y = np.arange(len(order))
     parts = [("success", "Llega a la meta", "#1baf7a"), ("collision", "Choca", "#C0392B"),
-             ("truncated", "Límite de pasos", "#9CA3AF")]
+             ("truncated", "Sin terminar (corte de seguridad)", "#9CA3AF")]
     left = np.zeros(len(order))
     for key, label, color in parts:
         values = np.array([100 * summary[k][key] for k in order])
@@ -190,7 +203,7 @@ def plot(curve, summary, figs):
                 ax.text(l + v / 2, yi, f"{v:.0f} %", ha="center", va="center", fontsize=8.5, color="white",
                         weight="bold")
         left += values
-    ax.set_yticks(y, [LABELS[k] for k in order], fontsize=9, color=ink)
+    ax.set_yticks(y, [LABELS[k] for k in order], fontsize=8.5, color=ink)
     ax.invert_yaxis()
     ax.set_xlim(0, 100)
     ax.set_xlabel("% de los episodios de prueba", color=ink)

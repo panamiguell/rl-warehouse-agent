@@ -4,7 +4,7 @@ import pytest
 from gymnasium.utils.env_checker import check_env
 
 from rl_gridworld import AVANZAR, GIRAR_DER, GIRAR_IZQ, ObstacleGridEnv, TabularAgent
-from rl_gridworld.baselines import POLICIES, run_policy
+from rl_gridworld.baselines import POLICIES, SENSOR_POLICIES, run_policy
 
 
 def scenario(agent, heading, obstacles, moved=None):
@@ -87,15 +87,37 @@ def test_t8_invalid_advance_into_wall():
     assert env.agent == (0, 0) and reward == -10 and not done and info["invalid"]
 
 
-def test_t10_time_limit_truncates():
-    env = ObstacleGridEnv({"obstaculos": 0, "max_pasos": 3})
+def test_t10_no_step_limit_only_safety_cutoff():
+    env = ObstacleGridEnv({"obstaculos": 0})
     env.reset(seed=0)
-    for _ in range(3):
+    for _ in range(999):                                      # el MDP no tiene límite de pasos
         _, reward, terminated, truncated, _ = env.step(GIRAR_DER)
-    assert reward == -1 and truncated and not terminated
+        assert reward == -1 and not terminated and not truncated
+    _, _, terminated, truncated, _ = env.step(GIRAR_DER)
+    assert truncated and not terminated                      # corte de seguridad del simulador
 
 
-def test_goal_never_blocked_and_obstacles_move_one_cell():
+def test_agent_does_not_see_obstacles():
+    env = scenario((2, 2), 1, FAR)
+    first = env.observe()
+    env.obstacles = [(2, 3), (3, 2), (1, 2), (2, 1), (6, 6)]  # rodeado: la observación no cambia
+    assert list(first) == list(env.observe()) == [2, 2, 1]
+
+
+def test_obstacles_avoid_start_and_goal_and_move_one_cell():
+    env = ObstacleGridEnv()
+    for seed in range(5):
+        env.reset(seed=seed)
+        env.obstacles = [(0, 1), (1, 0), (6, 7), (7, 6), (3, 3)]  # junto a la salida y a la meta
+        for _ in range(300):
+            before = list(env.obstacles)
+            after = env._move_obstacles()
+            assert not {(0, 0), (7, 7)} & set(after) and len(set(after)) == 5
+            assert all(abs(a[0] - b[0]) + abs(a[1] - b[1]) <= 1 for a, b in zip(before, after))
+            env.obstacles = after
+
+
+def test_obstacles_random_walk_reaches_board():
     env = ObstacleGridEnv()
     env.reset(seed=3)
     for _ in range(500):
@@ -106,18 +128,22 @@ def test_goal_never_blocked_and_obstacles_move_one_cell():
         env.obstacles = after
 
 
-def test_perception():
-    env = scenario((2, 2), 1, [(2, 3), (3, 1), (0, 0), (6, 6), (5, 5)])
+def test_perception_experiment():
+    env = ObstacleGridEnv({"percepcion": True})
+    env.reset(seed=0)
+    env.agent, env.heading, env.obstacles = (2, 2), 1, [(2, 3), (3, 1), (0, 1), (6, 6), (5, 5)]
     r, c, h, front, here, left, right = env.observe()
     assert (r, c, h) == (2, 2, 1) and front == 2 and here == 1     # frente ocupada; vecino en (2,3)
     assert left == 0 and right == 1                                  # (1,2) libre; (3,2) en riesgo por (3,1)
-    env = scenario((0, 3), 0, FAR)
+    env.agent, env.heading, env.obstacles = (0, 3), 0, FAR
     assert env.observe()[3] == 3                                     # frente: pared
 
 
-@pytest.mark.parametrize("name", list(POLICIES))
+@pytest.mark.parametrize("name", list(POLICIES) + list(SENSOR_POLICIES))
 def test_baselines_run(name):
-    result = run_policy(ObstacleGridEnv(), POLICIES[name], seed=1)
+    policy = {**POLICIES, **SENSOR_POLICIES}[name]
+    env = ObstacleGridEnv({"percepcion": name in SENSOR_POLICIES})
+    result = run_policy(env, policy, seed=1)
     assert result["success"] + result["collision"] + result["truncated"] == 1
 
 

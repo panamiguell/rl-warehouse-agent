@@ -5,6 +5,11 @@ chocar con 5 obstáculos que se mueven al azar en cada paso, al mismo tiempo que
 actúa. Acciones: girar 90° a la izquierda, girar 90° a la derecha y avanzar a la casilla de
 enfrente (solo si existe). La definición formal está en docs/proyecto_8x8.
 
+Reglas aclaradas por el curso (foro): el agente NO ve los obstáculos (solo se entera chocando),
+los obstáculos no se superponen ni entran en la salida (0,0) ni en la meta (7,7), y no hay
+límite de pasos. Por eso la observación del agente es (fila, columna, orientación). La opción
+``percepcion: true`` agrega sensores de obstáculos y se usa solo en un experimento adicional.
+
 Coordenadas: (fila, columna), con (0,0) arriba a la izquierda y (7,7) abajo a la derecha.
 Orientación: 0 = Norte (arriba), 1 = Este, 2 = Sur, 3 = Oeste.
 """
@@ -28,7 +33,8 @@ LIBRE, RIESGO, OCUPADA, PARED = 0, 1, 2, 3
 DEFAULTS = {
     "tamano": 8,
     "obstaculos": 5,
-    "max_pasos": 200,
+    "percepcion": False,       # el agente no ve los obstáculos (regla del curso)
+    "salvaguarda_pasos": 1000, # corte de seguridad del simulador; el MDP no tiene límite de pasos
     "recompensas": {
         "meta": 100,
         "colision": -100,
@@ -43,8 +49,8 @@ class ObstacleGridEnv(gym.Env):
     """Ambiente del cuarto 8x8.
 
     Estado completo (``full_state``): posición y orientación del agente y posiciones de los
-    5 obstáculos, más la condición terminal. Observación para la Q-tabla (``observe``):
-    (fila, columna, orientación, frente, aquí, izquierda, derecha), derivada del estado completo.
+    5 obstáculos, más la condición terminal. Observación del agente (``observe``):
+    (fila, columna, orientación); con ``percepcion`` se agregan (frente, aquí, izquierda, derecha).
     """
 
     metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
@@ -61,7 +67,8 @@ class ObstacleGridEnv(gym.Env):
         self.config = cfg
         self.size = cfg["tamano"]
         self.n_obstacles = cfg["obstaculos"]
-        self.max_steps = cfg["max_pasos"]
+        self.max_steps = cfg["salvaguarda_pasos"]
+        self.perception = bool(cfg["percepcion"])
         self.rewards = cfg["recompensas"]
         if self.size < 3 or not 0 <= self.n_obstacles <= self.size ** 2 - 2 or self.max_steps < 1:
             raise ValueError("Tamaño, número de obstáculos o límite de pasos inválidos")
@@ -69,7 +76,8 @@ class ObstacleGridEnv(gym.Env):
         self.goal = (self.size - 1, self.size - 1)
         self.render_mode = render_mode
         self.action_space = spaces.Discrete(3)
-        self.observation_space = spaces.MultiDiscrete([self.size, self.size, 4, 4, 2, 2, 2])
+        dims = [self.size, self.size, 4] + ([4, 2, 2, 2] if self.perception else [])
+        self.observation_space = spaces.MultiDiscrete(dims)
         self.action_names = ACTION_NAMES
         self._fig = None
         self.reset()
@@ -111,10 +119,13 @@ class ObstacleGridEnv(gym.Env):
         return RIESGO if self._threat(cell) else LIBRE
 
     def observe(self):
-        """Estado tabular φ(s) = (fila, col, θ, frente, aquí, izq, der)."""
+        """Observación del agente: (fila, col, θ); con percepción, además (frente, aquí, izq, der)."""
+        n = 7 if self.perception else 3
         if self.outcome is not None:
-            return np.zeros(7, dtype=np.int64)
+            return np.zeros(n, dtype=np.int64)
         r, c = self.agent
+        if not self.perception:
+            return np.array([r, c, self.heading], dtype=np.int64)
         side = lambda h: int(self.sense(self.ahead(h)) in (RIESGO, OCUPADA))
         here = int(any(abs(o[0] - r) + abs(o[1] - c) == 1 for o in self.obstacles))
         return np.array([r, c, self.heading, self.sense(self.ahead()), here,
@@ -137,14 +148,15 @@ class ObstacleGridEnv(gym.Env):
 
     # -------------------------------------------------------------- dinámica
     def _move_obstacles(self):
-        """Cada obstáculo elige al azar entre quedarse o ir a un vecino libre (no la meta)."""
+        """Cada obstáculo elige al azar entre quedarse o ir a un vecino libre (nunca la salida ni la meta)."""
         new = list(self.obstacles)
         for i in self.np_random.permutation(len(new)):
             taken = set(new[:i] + new[i + 1:])
             options = []
             for dr, dc in MOVES:
                 cell = (new[i][0] + dr, new[i][1] + dc)
-                if self.inside(cell) and cell != self.goal and (cell not in taken or (dr, dc) == (0, 0)):
+                if (self.inside(cell) and cell not in (self.start, self.goal)
+                        and (cell not in taken or (dr, dc) == (0, 0))):
                     options.append(cell)
             new[i] = options[self.np_random.integers(len(options))]
         return new

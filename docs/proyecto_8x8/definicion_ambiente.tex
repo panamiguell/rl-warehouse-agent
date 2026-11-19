@@ -73,7 +73,7 @@
 \toprule
 \textbf{Criterio} & \textbf{Sección} & \textbf{Qué se define} \\
 \midrule
-Estados & 2 & Estado completo del ambiente: posición $(f,c)$ y orientación $\theta$ del agente, posiciones de los cinco obstáculos, inicio $(0,0)$, meta $(7,7)$ y los estados terminales de llegada ($\META$) y colisión ($\COL$). Tipo, rango y restricciones de cada variable. Además, el estado $\phi(s)$ que usa la Q-tabla y por qué basta para aprender \\
+Estados & 2 & Estado completo del ambiente: posición $(f,c)$ y orientación $\theta$ del agente, posiciones de los cinco obstáculos, inicio $(0,0)$, meta $(7,7)$ y los estados terminales de llegada ($\META$) y colisión ($\COL$). Tipo, rango y restricciones de cada variable. Además, lo que observa el agente, $(f,c,\theta)$, que es el estado de su Q-tabla, y cómo aprende sin ver los obstáculos \\
 Acciones & 3 & $\IZQ$ (girar $90^\circ$ a la izquierda), $\DER$ (girar $90^\circ$ a la derecha) y $\AV$ (moverse a la casilla de enfrente si existe), con $A(s)$ explícito para cada estado del tablero, su efecto y la dinámica simultánea de los obstáculos \\
 Recompensas & 4 & $R(s,a,s')$ para todos los casos: llegar a $(7,7)$ ($+100$), chocar con un obstáculo ($-100$), costo de cada paso y de cada giro ($-1$), avance inválido ($-10$) y estados terminales. Diez triplas $(s,a,s')$ de ejemplo \\
 \bottomrule
@@ -83,6 +83,11 @@ Recompensas & 4 & $R(s,a,s')$ para todos los casos: llegar a $(7,7)$ ($+100$), c
 % =====================================================================
 \section{El ambiente}
 
+Las reglas siguen el enunciado y las aclaraciones del curso en el foro: el agente no puede salir del cuarto;
+el agente y los obstáculos se mueven a la vez; hay choque si terminan en la misma casilla o se cruzan, también
+mientras el agente gira; los obstáculos no se superponen ni entran en la meta, y se recomienda que tampoco
+entren en la salida; el agente no ve los obstáculos (solo se entera chocando), y no hay límite de pasos.
+
 El ambiente es un cuarto vacío de $8\times8$ casillas. El agente (triángulo negro) siempre empieza en la
 casilla superior izquierda $(0,0)$ y su objetivo es llegar a la casilla inferior derecha $(7,7)$ (cuadrado
 verde) sin estrellarse con ninguno de los cinco obstáculos (círculos azules). Los obstáculos aparecen en
@@ -91,10 +96,9 @@ choca con un obstáculo, el episodio termina.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.42\textwidth]{estado_inicial.png}\hspace{0.04\textwidth}%
-\includegraphics[width=0.42\textwidth]{percepcion.png}
-\caption{Izquierda: un estado inicial (agente en $(0,0)$ mirando al norte, como en la figura del enunciado).
-Derecha: las casillas en rosado son las que un obstáculo puede ocupar en el siguiente paso.}
+\includegraphics[width=0.42\textwidth]{estado_inicial.png}
+\caption{Un estado inicial: agente en $(0,0)$ mirando al norte, como en la figura del enunciado; los
+obstáculos, en posiciones al azar.}
 \label{fig:tablero}
 \end{figure}
 
@@ -104,9 +108,10 @@ N (arriba, $f-1$), E (derecha, $c+1$), S (abajo, $f+1$) y O (izquierda, $c-1$). 
 $\mathrm{fr}(f,c,\theta)$; por ejemplo, $\mathrm{fr}(2,2,\mathrm{E})=(2,3)$.
 
 \textbf{Dinámica de los obstáculos.} En cada paso, cada obstáculo elige al azar, con igual probabilidad, entre
-quedarse en su casilla o moverse a una de sus cuatro vecinas, descartando las que están fuera del cuarto, la
-meta $(7,7)$ o una casilla ya ocupada por otro obstáculo. Los obstáculos sí pueden entrar en la casilla del
-agente: eso es una colisión. Así la meta nunca queda bloqueada y siempre existe un camino.
+quedarse en su casilla o moverse a una de sus cuatro vecinas (arriba, abajo, izquierda o derecha), descartando
+las que están fuera del cuarto, la salida $(0,0)$, la meta $(7,7)$ o una casilla ya ocupada por otro obstáculo.
+Quedarse quieto siempre es posible. Los obstáculos sí pueden entrar en la casilla del agente: eso es una
+colisión. Así la meta nunca queda bloqueada y siempre existe un camino.
 
 \textbf{Movimiento simultáneo y colisión.} El agente aplica su acción y los obstáculos se mueven en el mismo
 paso. Hay colisión si, después del paso, (i) el agente y un obstáculo ocupan la misma casilla, o (ii) el agente
@@ -132,7 +137,7 @@ con las variables del cuadro~\ref{tab:estado}.
 \midrule
 $(f, c)$ & Posición del agente & Entero, $\{0,\dots,7\}^2$ & $(f,c)\neq(7,7)$ en un estado no terminal \\
 $\theta$ & Orientación del agente & Categórica, $\{\mathrm{N},\mathrm{E},\mathrm{S},\mathrm{O}\}$ & Cambia solo al girar \\
-$o_i=(f_i,c_i)$, $i=1..5$ & Posición de cada obstáculo & Entero, $\{0,\dots,7\}^2$ & Distintas entre sí, distintas de $(7,7)$ y de $(f,c)$ \\
+$o_i=(f_i,c_i)$, $i=1..5$ & Posición de cada obstáculo & Entero, $\{0,\dots,7\}^2$ & Distintas entre sí, distintas de $(0,0)$, de $(7,7)$ y de $(f,c)$ \\
 \bottomrule
 \end{tabularx}
 \caption{Variables del estado completo.}
@@ -146,48 +151,34 @@ $o_i=(f_i,c_i)$, $i=1..5$ & Posición de cada obstáculo & Entero, $\{0,\dots,7\
     siempre forman parte del estado.
   \item \textbf{Estados terminales}: $\META$ (el agente llegó a $(7,7)$ sin chocar) y $\COL$ (el agente chocó
     con un obstáculo). En ambos el episodio termina y no hay acciones.
-  \item \textbf{Tamaño}: hay $63\cdot4\cdot\binom{62}{5}$, es decir $1\,630\,692\,504$, estados no terminales,
+  \item \textbf{Tamaño}: con el agente en la salida los obstáculos ocupan 5 de 62 casillas, y en cualquier otra
+    casilla, 5 de 61. Hay $4\big[\binom{62}{5}+62\binom{61}{5}\big]=1\,501\,272\,464$ estados no terminales,
     más los 2 terminales. Los obstáculos son intercambiables, así que se cuentan como un conjunto.
-  \item \textbf{Límite de pasos}: si el agente no termina en 200 pasos, el episodio se corta. Es un límite
-    práctico de la simulación, no un estado terminal del MDP.
+  \item \textbf{Sin límite de pasos}: un episodio solo termina en $\META$ o $\COL$. El simulador tiene un corte de
+    seguridad a los 1\,000 pasos, que no forma parte del MDP y no se alcanza en ninguna evaluación.
 \end{itemize}
 
 Este estado es de Markov: con la posición y la orientación del agente y las posiciones de los obstáculos, la
 distribución del siguiente estado y de la recompensa depende solo de la acción. Los obstáculos se mueven sin
 memoria y no dependen de pasos anteriores.
 
-\subsection{Estado que usa la Q-tabla}
+\subsection{Lo que observa el agente: el estado de la Q-tabla}
 
-Una Q-tabla con 1\,600 millones de filas no se puede llenar: el agente casi nunca vería dos veces la misma
-configuración de obstáculos. Por eso el agente aprende sobre una representación $\phi(s)$ calculada a partir
-del estado completo. Conserva la posición y la orientación, y resume los obstáculos con lo que importa para
-decidir:
+El agente no ve los obstáculos: solo se entera de que existen cuando choca. Lo que observa en cada paso es su
+posición y su orientación,
 \[
-  \phi(s) = (f,\ c,\ \theta,\ \mathit{fr},\ \mathit{aq},\ \mathit{iz},\ \mathit{de}).
+  x(s) = (f,\ c,\ \theta),
 \]
+y esa es la clave de su Q-tabla: $8\cdot8\cdot4=256$ filas (252 no terminales, porque $(7,7)$ es la meta)
+por 3 acciones.
 
-\begin{table}[H]
-\centering\small
-\begin{tabularx}{\textwidth}{@{}P{1.6cm}P{2.6cm}L@{}}
-\toprule
-\textbf{Variable} & \textbf{Rango} & \textbf{Significado} \\
-\midrule
-$f, c, \theta$ & Como en el estado completo & Dónde está el agente y hacia dónde mira \\
-$\mathit{fr}$ & $\{0,1,2,3\}$ & Casilla de enfrente: 0 libre, 1 en riesgo (un obstáculo está al lado y puede entrar en el siguiente paso), 2 ocupada por un obstáculo, 3 pared \\
-$\mathit{aq}$ & $\{0,1\}$ & 1 si algún obstáculo está al lado del agente y puede entrar en su casilla \\
-$\mathit{iz}$, $\mathit{de}$ & $\{0,1\}$ & 1 si la casilla a la izquierda (o derecha) del agente está ocupada o en riesgo \\
-\bottomrule
-\end{tabularx}
-\caption{Estado tabular $\phi(s)$: $8\cdot8\cdot4\cdot4\cdot2\cdot2\cdot2=8\,192$ combinaciones.}
-\end{table}
-
-\textbf{Por qué basta para aprender.} Un obstáculo se mueve a lo sumo una casilla por paso. Por eso, en el
-siguiente paso solo puede causar una colisión si está a una casilla del agente o de la casilla de enfrente:
-entrando en la casilla del agente, entrando en la casilla a la que el agente avanza, o cruzándose con él.
-Esos son justamente los casos que distinguen $\mathit{aq}$ y $\mathit{fr}$. Los otros obstáculos no pueden
-afectar el resultado inmediato de ninguna acción. $\mathit{iz}$ y $\mathit{de}$ anticipan qué pasará después
-de girar. La posición y la orientación le permiten aprender el camino hacia $(7,7)$. Lo que se pierde (cuántos
-obstáculos hay y en qué dirección exacta) solo afecta la probabilidad de chocar, no la posibilidad de hacerlo.
+Los obstáculos siguen siendo parte del estado del ambiente: determinan las transiciones y las recompensas. El
+agente los ``siente'' a través de las colisiones: cada vez que una acción en una casilla termina en choque,
+recibe $-100$ y su estimación $Q(x,a)$ baja. Después de muchos episodios, $Q(x,a)$ estima el retorno esperado
+promediando sobre todas las posiciones posibles de los obstáculos. Así el agente aprende qué ruta tiene menos
+riesgo de colisión en promedio: por ejemplo, que en las casillas del borde un obstáculo puede llegar desde
+menos vecinas y que cada giro es un paso más expuesto. Formalmente es un problema parcialmente observable; la
+política que se aprende es la mejor que depende solo de $(f,c,\theta)$.
 
 % =====================================================================
 \section{Acciones del agente}
@@ -217,9 +208,10 @@ A(s)=\begin{cases}
 A & \text{en cualquier otro caso.}
 \end{cases}
 \]
-Por ejemplo, en el estado inicial (agente en $(0,0)$ mirando al norte) solo puede girar. Avanzar hacia una
-casilla con un obstáculo sí está permitido, porque el obstáculo puede moverse en ese mismo paso; el riesgo se
-refleja en la recompensa. En total hay 32 pares (casilla, orientación) del borde en los que $\AV$ no aplica.
+Por ejemplo, en el estado inicial (agente en $(0,0)$ mirando al norte) solo puede girar. $A(s)$ depende solo
+de la posición y la orientación, que el agente conoce. Avanzar hacia una casilla con un obstáculo sí está
+permitido: el agente no lo ve, y el obstáculo puede moverse en ese mismo paso; el riesgo se refleja en la
+recompensa. En total hay 32 pares (casilla, orientación) del borde en los que $\AV$ no aplica.
 
 \textbf{Transición.} Desde $s$ con la acción $a\in A(s)$: (1) el agente gira o avanza según el cuadro anterior;
 (2) al mismo tiempo, cada obstáculo se mueve según la dinámica de la sección 1; (3) si hay colisión,
@@ -255,9 +247,15 @@ $s\in\{\META,\COL\}$ & -- & Estado terminal: no hay acciones ni recompensas \\
 \caption{Recompensas para todas las situaciones posibles.}
 \end{table}
 
-\textbf{Descuento y comportamiento esperado.} Se usa $\gamma=0{,}95$. Con estas recompensas, la política óptima
-llega a $(7,7)$ por un camino corto, gira solo cuando hace falta y, cuando un obstáculo amenaza la casilla de
-enfrente, prefiere esperar girando o desviarse antes que avanzar hacia él.
+\textbf{Descuento.} Se usa $\gamma=0{,}99$. Como no hay límite de pasos y los obstáculos no entran en la
+salida, el agente podría quedarse girando en $(0,0)$ para siempre sin chocar. Eso vale
+$-1/(1-\gamma)=-100$, lo mismo que chocar, así que intentar llegar a la meta es preferible. Con un $\gamma$
+menor, por ejemplo $0{,}95$, quedarse girando valdría solo $-20$, más que el valor esperado de intentar el
+recorrido, y el agente aprendería a no salir nunca. Lo comprobamos al entrenar.
+
+\textbf{Comportamiento esperado.} Con estas recompensas, la política óptima llega a $(7,7)$ por el camino con
+menos riesgo esperado de colisión: corto y con pocos giros, porque cada paso y cada giro lo exponen a que un
+obstáculo entre en su casilla.
 
 \subsection{Triplas \texorpdfstring{$(s,a,s')$}{(s,a,s')} de ejemplo}
 
@@ -281,7 +279,7 @@ T6 & $(2,2,\mathrm{E}\,|\,(2,3),\dots)$ & $\AV$ & $\COL$ & El obstáculo pasa a 
 T7 & $(2,2,\mathrm{N}\,|\,(3,2),\dots)$ & $\DER$ & $\COL$ & El obstáculo de $(3,2)$ entra en la casilla del agente mientras gira & $-100$ \\
 T8 & $(0,0,\mathrm{N}\,|\,O)$ & $\AV$ (sin máscara) & $(0,0,\mathrm{N}\,|\,O')$ & Avanza contra la pared: no se mueve & $-10$ \\
 T9 & $\META$ o $\COL$ & -- & -- & Terminal: $A(s)=\emptyset$ & -- \\
-T10 & Paso 200 sin terminar & Cualquiera & No terminal & El episodio se corta por el límite; la recompensa es la de la acción & $-1$ \\
+T10 & $(0,0,\theta\,|\,O)$ & $\IZQ$ o $\DER$ & $(0,0,\theta'\,|\,O')$ & Gira en la salida, donde no entran obstáculos: no hay límite de pasos y cada giro cuesta & $-1$ \\
 \bottomrule
 \end{tabularx}
 \caption{Ejemplos de $R(s,a,s')$. $O'$ son las posiciones de los obstáculos después de moverse.}

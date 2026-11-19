@@ -4,7 +4,7 @@ Repositorio del proyecto del curso **Aprendizaje por Refuerzo** (Maestría en In
 
 ## Proyecto del curso: cuarto 8x8 con obstáculos móviles
 
-Un agente (triángulo) parte de la casilla (0,0) mirando al norte y debe llegar a la meta (7,7) sin chocar con cinco obstáculos que se mueven al azar en cada paso, al mismo tiempo que él. Puede girar 90° a la izquierda o a la derecha, o avanzar a la casilla de enfrente si existe.
+Un agente (triángulo) parte de la casilla (0,0) mirando al norte y debe llegar a la meta (7,7) sin chocar con cinco obstáculos que se mueven al azar en cada paso, al mismo tiempo que él. Puede girar 90° a la izquierda o a la derecha, o avanzar a la casilla de enfrente si existe. Siguiendo las aclaraciones del curso, el agente **no ve los obstáculos** (su Q-tabla depende solo de posición y orientación), los obstáculos no se superponen ni entran en la salida ni en la meta, y no hay límite de pasos.
 
 | Entregable | Archivo |
 | --- | --- |
@@ -18,7 +18,7 @@ Un agente (triángulo) parte de la casilla (0,0) mirando al norte y debe llegar 
 ```powershell
 conda env create -f environment.yml
 conda activate rl-warehouse-agent
-python -m pytest tests/test_gridworld.py                # 17 pruebas, incluidas las triplas (s, a, s') del documento
+python -m pytest tests/test_gridworld.py                # 20 pruebas, incluidas las triplas (s, a, s') del documento
 python experiments/cuarto_8x8/train.py                  # entrena Q-learning y SARSA y los compara con reglas fijas
 python experiments/cuarto_8x8/demo.py                   # carga la Q-tabla y graba el video
 python experiments/cuarto_8x8/demo.py --human           # lo muestra en una ventana
@@ -30,13 +30,15 @@ La Q-tabla se guarda con `TabularAgent.save(ruta)` y se carga con `TabularAgent.
 
 | Política | Llega a la meta | Choca | Pasos si llega |
 |---|---|---|---|
-| **Q-learning** | 58,6 % ± 2,2 | 41,4 % | 23,3 |
-| SARSA | 59,4 % ± 2,2 | 40,6 % | 23,0 |
-| Regla cautelosa | 53,1 % ± 2,2 | 46,9 % | 19,9 |
-| Regla directa | 33,1 % ± 2,1 | 66,8 % | 16,0 |
-| Aleatoria (sin entrenar) | 0,4 % ± 0,3 | 99,7 % | 65,3 |
+| **Q-learning** | 35,1 % ± 2,1 | 64,9 % | 16,0 |
+| SARSA | 34,4 % ± 2,1 | 65,6 % | 17,0 |
+| Regla: por el borde | 35,1 % ± 2,1 | 64,9 % | 16,0 |
+| Regla: escalera por el centro | 15,9 % ± 1,6 | 84,1 % | 28,0 |
+| Aleatoria (sin entrenar) | 0,4 % ± 0,3 | 99,6 % | 71,4 |
 
-![Curvas de aprendizaje](results/cuarto_8x8/figures/curvas_aprendizaje.png)
+El agente aprendió por su cuenta la ruta por el borde (derecha por la fila 0 y abajo por la columna 7, con dos giros), que es la de menos riesgo cuando no se ven los obstáculos. Como experimento adicional (`configs/cuarto_8x8_sensores.yaml`, no es el ambiente del curso), con sensores de obstáculos Q-learning llega a la meta en el 65,2 %.
+
+![Ruta aprendida](docs/proyecto_8x8/figuras/ruta_aprendida.png)
 
 ## Trabajo complementario: consolidación de picking en un centro de distribución
 
@@ -65,6 +67,7 @@ rl-warehouse-agent/
 ├── notebooks/             Exploración y análisis de resultados
 ├── results/
 │   ├── cuarto_8x8/        Q-tablas, registros, figuras y video del cuarto 8x8
+│   ├── cuarto_8x8_sensores/  Experimento adicional con sensores de obstáculos
 │   ├── figures/           Gráficas para los informes
 │   ├── models/            Q-tablas entrenadas (.npz y .csv)
 │   ├── logs/              Registros de entrenamiento y evaluación

@@ -11,7 +11,7 @@ class TabularAgent:
     """Q-tabla dispersa {estado (tupla): valores de las 3 acciones} con política ε-greedy sobre A(s)."""
 
     def __init__(self, n_actions=3, algorithm="q_learning", alpha=0.1, gamma=0.99, epsilon=1.0,
-                 epsilon_min=0.05, epsilon_decay=1.0, seed=0):
+                 epsilon_min=0.05, epsilon_decay=1.0, seed=0, alpha_power=None):
         if algorithm not in ALGORITHMS:
             raise ValueError("Algoritmo desconocido")
         self.n_actions, self.algorithm = n_actions, algorithm
@@ -19,6 +19,9 @@ class TabularAgent:
         self.epsilon, self.epsilon_min, self.epsilon_decay = epsilon, epsilon_min, epsilon_decay
         self.rng = np.random.default_rng(seed)
         self.q = defaultdict(lambda: np.zeros(n_actions))
+        self.visits = defaultdict(int)
+        # alpha_power = ω: tasa por visitas α(s,a) = max(alpha, N(s,a)^-ω). None: α fija.
+        self.alpha_power = alpha_power
         self.episodes_trained = 0
 
     def values(self, state):
@@ -49,7 +52,11 @@ class TabularAgent:
                 else:
                     # Q-learning, o corte por límite de pasos (s' no es terminal: se sigue estimando).
                     future = self.values(nxt)[info["action_mask"]].max()
-                self.q[key][action] += self.alpha * (reward + self.gamma * future - self.q[key][action])
+                self.visits[(key, action)] += 1
+                rate = self.alpha
+                if self.alpha_power is not None:
+                    rate = max(self.alpha, self.visits[(key, action)] ** -self.alpha_power)
+                self.q[key][action] += rate * (reward + self.gamma * future - self.q[key][action])
             total += reward
             if done:
                 break
@@ -70,7 +77,8 @@ class TabularAgent:
             states=np.array(keys, dtype=np.int64).reshape(len(keys), -1),
             values=np.array([self.q[k] for k in keys]).reshape(len(keys), self.n_actions),
             meta=np.array([self.algorithm, self.alpha, self.gamma, self.epsilon, self.epsilon_min,
-                           self.epsilon_decay, self.n_actions, self.episodes_trained], dtype=object),
+                           self.epsilon_decay, self.n_actions, self.episodes_trained, self.alpha_power],
+                          dtype=object),
         )
         return path
 
@@ -78,9 +86,9 @@ class TabularAgent:
     def load(cls, path, seed=0):
         """Carga una Q-tabla guardada con ``save`` y devuelve el agente listo para usar."""
         data = np.load(path, allow_pickle=True)
-        algorithm, alpha, gamma, eps, eps_min, decay, n_actions, trained = data["meta"]
+        algorithm, alpha, gamma, eps, eps_min, decay, n_actions, trained, power = data["meta"]
         agent = cls(int(n_actions), str(algorithm), float(alpha), float(gamma), float(eps), float(eps_min),
-                    float(decay), seed)
+                    float(decay), seed, None if power is None else float(power))
         agent.episodes_trained = int(trained)
         for state, values in zip(data["states"], data["values"]):
             agent.q[tuple(int(x) for x in state)] = np.array(values, dtype=float)
@@ -91,6 +99,7 @@ class TabularAgent:
         rows = []
         for key in sorted(self.q):
             row = dict(zip(names, key))
+            row["orientacion"] = "NESO"[row["orientacion"]]
             row.update({f"Q_{a}": round(float(v), 4) for a, v in zip(action_names, self.q[key])})
             rows.append(row)
         return rows

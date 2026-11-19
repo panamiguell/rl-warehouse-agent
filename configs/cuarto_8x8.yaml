@@ -1,19 +1,26 @@
 # Proyecto del curso: cuarto 8x8 con 5 obstáculos móviles (docs/proyecto_8x8).
+# Reglas aclaradas en el foro del curso: el agente no ve los obstáculos, los obstáculos no se
+# superponen ni entran en la salida (0,0) ni en la meta (7,7), y no hay límite de pasos.
+
+salida: results/cuarto_8x8
 
 ambiente:
   tamano: 8                 # cuarto de 8x8; inicio (0,0) mirando al norte, meta (7,7)
   obstaculos: 5             # se mueven al azar en cada paso, al mismo tiempo que el agente
-  max_pasos: 200            # límite de pasos por episodio (corte, no estado terminal)
+  percepcion: false         # el agente no ve los obstáculos: observa (fila, columna, orientación)
+  salvaguarda_pasos: 1000   # corte de seguridad del simulador (el MDP no tiene límite de pasos)
   recompensas:
     meta: 100               # llegar a (7,7)
-    colision: -100          # chocar con un obstáculo (incluye intercambio de casillas)
+    colision: -100          # chocar con un obstáculo (casilla compartida o cruce)
     paso: -1                # cada AVANZAR que no termina el episodio
     giro: -1                # cada giro que no termina el episodio
     accion_invalida: -10    # AVANZAR contra la pared (solo si no se usa la máscara A(s))
 
 entrenamiento:
-  alpha: 0.05
-  gamma: 0.95
+  episodios: 50000
+  gamma: 0.99               # sin límite de pasos, girar sin fin en la salida vale -1/(1-γ) = -100
+  alpha_potencia: 0.7       # tasa por visitas: α(s,a) = max(alpha_minima, N(s,a)^-0.7)
+  alpha_minima: 0.01
   epsilon_inicial: 1.0
   epsilon_minimo: 0.05      # se alcanza al 80 % del entrenamiento (decaimiento geométrico)
   semilla: 0

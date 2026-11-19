@@ -76,14 +76,16 @@
 
 \section*{Resumen}
 
-Se implementó el ambiente del enunciado: un cuarto de $8\times8$ donde el agente parte de $(0,0)$, debe llegar
-a $(7,7)$ y no puede chocar con cinco obstáculos que se mueven al azar al mismo tiempo que él. Se entrenaron
-agentes de Q-learning y SARSA durante \Episodios{} episodios. Sin entrenar, el agente llega a la meta en el
-\RandExito\,\% de los episodios. Entrenado con Q-learning llega en el \textbf{\QLExito\,\%} (SARSA, \SARSAExito\,\%),
-por encima de una regla cautelosa diseñada a mano (\CautExito\,\%) y de una que va directo a la meta sin mirar
-los obstáculos (\DirExito\,\%). La diferencia frente a la regla cautelosa, medida en los mismos \TurnosPrueba{}
-episodios de prueba, es de \DifQL{} $\pm$ \DifQLci{} puntos porcentuales. La Q-tabla se guarda y se carga desde
-un archivo, y el video muestra al agente usando esa Q-tabla.
+Se implementó el ambiente del enunciado con las reglas que aclaró el curso: un cuarto de $8\times8$ donde el
+agente parte de $(0,0)$, debe llegar a $(7,7)$ y no puede chocar con cinco obstáculos que se mueven al azar al
+mismo tiempo que él. El agente no ve los obstáculos, así que su Q-tabla depende solo de su posición y su
+orientación. Se entrenaron agentes de Q-learning y SARSA durante \Episodios{} episodios. Sin entrenar, el agente
+llega a la meta en el \RandExito\,\% de los episodios. Entrenado con Q-learning llega en el
+\textbf{\QLExito\,\%}, y lo hace por una ruta que nadie le indicó: va por el borde, primero hacia la derecha y
+luego hacia abajo, con solo dos giros. Esa ruta es la mejor de las reglas que diseñamos a mano, y supera en
+\DifQLEsc{} $\pm$ \DifQLEscci{} puntos a la ruta en escalera por el centro. La Q-tabla se guarda y se carga
+desde un archivo, y el video muestra al agente usando esa Q-tabla. Como experimento adicional, se midió que si
+el agente pudiera ver los obstáculos llegaría a la meta en el \SQLExito\,\%.
 
 % =====================================================================
 \section{Definición del problema}
@@ -97,11 +99,11 @@ La definición completa (estados, acciones, recompensas y triplas $(s,a,s')$ ver
 \toprule
 \textbf{Elemento} & \textbf{Definición} \\
 \midrule
-Estado completo & $s=(f,c,\theta,o_1,\dots,o_5)$: posición y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Inicio: $(0,0)$ mirando al norte, obstáculos al azar. Terminales: $\META$ (llega a $(7,7)$) y $\COL$ (choca). Corte a los 200 pasos \\
-Estado de la Q-tabla & $\phi(s)=(f,c,\theta,\mathit{fr},\mathit{aq},\mathit{iz},\mathit{de})$: posición, orientación y percepción local. $\mathit{fr}$: casilla de enfrente libre, en riesgo, ocupada o pared. $\mathit{aq}$: hay un obstáculo al lado. $\mathit{iz},\mathit{de}$: peligro a los lados. 8\,192 combinaciones \\
+Estado del ambiente & $s=(f,c,\theta,o_1,\dots,o_5)$: posición y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Inicio: $(0,0)$ mirando al norte, obstáculos al azar. Terminales: $\META$ (llega a $(7,7)$) y $\COL$ (choca). Sin límite de pasos \\
+Observación del agente & $(f,c,\theta)$: el agente no ve los obstáculos, solo se entera chocando. Es la clave de la Q-tabla: 256 filas por 3 acciones \\
 Acciones & $\IZQ$ y $\DER$ (girar $90^\circ$; siempre aplicables) y $\AV$ (a la casilla de enfrente; solo si existe) \\
-Dinámica & Cada obstáculo se queda o pasa a una vecina al azar (nunca a la meta), al mismo tiempo que el agente. Hay colisión si comparten casilla o se cruzan \\
-Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y cada giro; $-10$ por avanzar contra la pared (no ocurre con la máscara $A(s)$) \\
+Dinámica & Cada obstáculo se queda o pasa a una vecina al azar (nunca a la salida ni a la meta, ni encima de otro), al mismo tiempo que el agente. Hay colisión si comparten casilla o se cruzan, también mientras el agente gira \\
+Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y cada giro; $-10$ por avanzar contra la pared (no ocurre con la máscara $A(s)$). $\gamma=\GammaF$ \\
 \bottomrule
 \end{tabularx}
 \caption{Resumen del MDP.}
@@ -115,24 +117,27 @@ El código está en el repositorio \href{https://github.com/panamiguell/rl-wareh
 \begin{itemize}
   \item \code{src/rl\_gridworld/env.py}: el ambiente, compatible con Gymnasium. \code{reset} ubica al agente y
     los obstáculos; \code{step} aplica la acción, mueve los obstáculos, detecta colisiones y devuelve la
-    recompensa; \code{action\_mask} da $A(s)$; \code{observe} calcula $\phi(s)$.
+    recompensa; \code{action\_mask} da $A(s)$; \code{observe} entrega $(f,c,\theta)$.
   \item \code{src/rl\_gridworld/agent.py}: los agentes tabulares (Q-learning y SARSA) y la memoria del agente.
     \code{TabularAgent.save(ruta)} guarda la Q-tabla con sus hiperparámetros en un archivo \code{.npz}, y
     \code{TabularAgent.load(ruta)} la carga en un agente listo para actuar. La Q-tabla también se exporta
     legible en CSV: una fila por estado y una columna por acción.
-  \item \code{src/rl\_gridworld/baselines.py}: tres reglas fijas de referencia. La \emph{aleatoria} hace lo
-    mismo que el agente antes de entrenar. La \emph{directa} va a la meta por el camino más corto sin mirar los
-    obstáculos. La \emph{cautelosa} solo avanza si la casilla de enfrente está libre y sin riesgo; si no, gira.
+  \item \code{src/rl\_gridworld/baselines.py}: reglas fijas de referencia que, como el agente, no ven los
+    obstáculos. La \emph{aleatoria} hace lo mismo que el agente antes de entrenar. La regla \emph{por el borde}
+    va hacia la derecha por la fila 0 y luego hacia abajo por la columna 7. La regla \emph{escalera} alterna
+    derecha y abajo por la diagonal. Las dos últimas son caminos de longitud mínima (14 avances).
   \item \code{experiments/cuarto\_8x8/}: entrenamiento y evaluación (\code{train.py}), video (\code{demo.py})
     y cifras de este reporte (\code{report\_numbers.py}).
-  \item \code{tests/test\_gridworld.py}: 17 pruebas automáticas, entre ellas cada tripla $(s,a,s')$ del
-    documento de definición y el guardar/cargar de la Q-tabla.
+  \item \code{tests/test\_gridworld.py}: 20 pruebas automáticas, entre ellas cada tripla $(s,a,s')$ del
+    documento de definición, que el agente no ve los obstáculos y el guardar/cargar de la Q-tabla.
 \end{itemize}
 
-\textbf{Actualizaciones.} Con $\delta = r + \gamma\,\hat{Q}(s') - Q(s,a)$ y $Q(s,a)\leftarrow Q(s,a)+\alpha\,\delta$,
-Q-learning usa $\hat{Q}(s')=\max_{a'\in A(s')}Q(s',a')$ y SARSA usa $\hat{Q}(s')=Q(s',a')$ con la acción que
-realmente toma. En $\META$ y $\COL$, $\hat{Q}(s')=0$. Si el episodio se corta por el límite de pasos, $s'$ no es
-terminal y se sigue estimando con $\max_{a'}Q(s',a')$.
+\textbf{Actualizaciones.} Con $\delta = r + \gamma\,\hat{Q}(x') - Q(x,a)$ y $Q(x,a)\leftarrow Q(x,a)+\alpha_t\,\delta$,
+Q-learning usa $\hat{Q}(x')=\max_{a'\in A(x')}Q(x',a')$ y SARSA usa $\hat{Q}(x')=Q(x',a')$ con la acción que
+realmente toma. En $\META$ y $\COL$, $\hat{Q}(x')=0$. Como el agente no ve los obstáculos, la misma acción en la
+misma casilla a veces termina en choque y a veces no: las recompensas son muy ruidosas. Con una $\alpha$ fija
+los valores oscilaban y la política cambiaba de un punto de control a otro. Por eso la tasa de aprendizaje
+disminuye con las visitas a cada par: $\alpha_t(x,a)=\max(\AlphaMin,\ N(x,a)^{-\AlphaPot})$.
 
 \begin{table}[H]
 \centering\small
@@ -141,37 +146,41 @@ terminal y se sigue estimando con $\max_{a'}Q(s',a')$.
 \textbf{Parámetro} & \textbf{Valor} \\
 \midrule
 Episodios de entrenamiento & \Episodios{} por algoritmo \\
-Tasa de aprendizaje $\alpha$ / descuento $\gamma$ & \Alpha{} / \GammaF{} \\
+Tasa de aprendizaje & $\alpha_t(x,a)=\max(\AlphaMin,\ N(x,a)^{-\AlphaPot})$ \\
+Descuento $\gamma$ & \GammaF{} \\
 Exploración $\varepsilon$ & De \EpsIni{} a \EpsMin{}, decaimiento geométrico hasta el 80\,\% del entrenamiento \\
 Inicialización de la Q-tabla & $Q=0$ \\
 Evaluación & Política greedy (sin exploración) \\
 Semillas & Entrenamiento, validación y prueba disjuntas \\
-Q-tabla entregada & La del mejor punto de control en validación (\TurnosValidacion{} episodios cada 20\,000): episodio \QLCkpt{} \\
+Q-tabla entregada & La del mejor punto de control en validación (\TurnosValidacion{} episodios cada 5\,000): episodio \QLCkpt{} \\
 Evaluación final & \TurnosPrueba{} episodios de prueba, los mismos para agentes y reglas \\
 \bottomrule
 \end{tabularx}
 \caption{Hiperparámetros y protocolo.}
 \end{table}
 
+\textbf{Una lección del entrenamiento.} La primera versión usaba $\gamma=0{,}95$, y el agente aprendió a
+\emph{no salir nunca} de $(0,0)$. Como los obstáculos no entran en la salida y no hay límite de pasos, girar
+para siempre ahí no tiene riesgo y ``vale'' $-1/(1-0{,}95)=-20$, más que el valor esperado de intentar el
+recorrido con una probabilidad de chocar cercana al 65\,\%. Con $\gamma=0{,}99$, girar sin fin vale $-100$, lo
+mismo que chocar, y el agente prefiere intentarlo.
+
 % =====================================================================
-\clearpage
 \section{Resultados}
 
 \subsection{Curvas de aprendizaje}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.8\textwidth]{curvas_aprendizaje.png}
+\includegraphics[width=0.78\textwidth]{curvas_aprendizaje.png}
 \caption{Porcentaje de episodios de validación que llegan a la meta durante el entrenamiento.}
 \label{fig:curvas}
 \end{figure}
 
-Antes de entrenar, la Q-tabla está en ceros y el agente actúa al azar: casi nunca llega a la meta. En los
-primeros 20\,000 episodios Q-learning aprende el camino y ya supera a la regla directa; SARSA, que aprende
-con la política exploratoria, tarda un poco más. Desde unos 60\,000 episodios los dos rondan o superan el
-nivel de la regla cautelosa. La curva oscila unos puntos porque los obstáculos son aleatorios y
-$\phi(s)$ no distingue cuántos obstáculos amenazan al agente. Por eso se guarda la Q-tabla del mejor punto
-de control.
+Antes de entrenar, la Q-tabla está en ceros y el agente actúa al azar: casi nunca llega a la meta. Al principio,
+mientras explora mucho, la política greedy cambia de un punto de control a otro y en algunos queda girando en un
+mismo sitio (0\,\% de llegadas). A partir de unos 20\,000 episodios las dos se estabilizan. Q-learning fija la
+ruta por el borde y alcanza la línea de esa regla. SARSA se queda en una variante espejo con un giro más.
 
 \subsection{Evaluación en prueba}
 
@@ -179,74 +188,70 @@ de control.
 \centering\small
 \begin{tabularx}{\textwidth}{@{}Lrrrrr@{}}
 \toprule
-\textbf{Política} & \textbf{Llega a la meta (\%)} & \textbf{Choca (\%)} & \textbf{Corte (\%)} & \textbf{Pasos si llega} & \textbf{Recompensa} \\
+\textbf{Política} & \textbf{Llega (\%)} & \textbf{Choca (\%)} & \textbf{Sin terminar (\%)} & \textbf{Pasos si llega} & \textbf{Recompensa} \\
 \midrule
 \filas{generado/tabla_resultados.tex}
 \bottomrule
 \end{tabularx}
-\caption{Resultados en \TurnosPrueba{} episodios de prueba ($\pm$: intervalo de confianza del 95\,\%).}
+\caption{Resultados en \TurnosPrueba{} episodios de prueba ($\pm$: intervalo de confianza del 95\,\%).
+``Sin terminar'' son los episodios que llegarían al corte de seguridad de 1\,000 pasos.}
 \label{tab:resultados}
 \end{table}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.8\textwidth]{comparacion.png}
+\includegraphics[width=0.78\textwidth]{comparacion.png}
 \caption{Cómo termina cada episodio de prueba.}
 \end{figure}
 
-Como todas las políticas se evaluaron en los mismos episodios (misma posición inicial y mismos movimientos
-aleatorios de los obstáculos), la comparación es pareada. Frente a la regla cautelosa, Q-learning llega a la
-meta en \DifQL{} $\pm$ \DifQLci{} puntos porcentuales más de episodios: gana \SoloQL{} episodios que la regla
-pierde y pierde \SoloCautQL{} que la regla gana. SARSA mejora \DifSARSA{} $\pm$ \DifSARSAci{} puntos. Los dos
-agentes tardan unos pasos más que la regla cautelosa cuando llegan (\QLPasos{} contra \CautPasos{}): a
-cambio de chocar menos, a veces toman caminos más largos. Ningún episodio llega al límite de 200 pasos, así que el agente
-no se queda dando vueltas.
+Todas las políticas se evaluaron en los mismos episodios: misma posición inicial y mismos movimientos
+aleatorios de los obstáculos. Frente al agente sin entrenar, Q-learning llega a la meta en \DifQLRand{} $\pm$
+\DifQLRandci{} puntos porcentuales más de episodios. Su resultado coincide con el de la regla por el borde en
+los \IgualBorde{} episodios de prueba, porque toma exactamente esa ruta, y supera a la escalera por el centro en
+\DifQLEsc{} $\pm$ \DifQLEscci{} puntos. Ningún episodio quedó sin terminar: el agente siempre avanza hacia la
+meta.
 
-\subsection{Qué aprendió el agente}
+\subsection{Qué aprendió el agente: la ruta}
 
-El cuadro~\ref{tab:politica} muestra con qué frecuencia el agente avanza según lo que percibe enfrente y a su
-lado, comparado con la regla cautelosa.
+Como el agente no ve los obstáculos, su política depende solo de dónde está y hacia dónde mira, así que es una
+ruta fija. La figura~\ref{fig:ruta} la muestra.
 
-\begin{table}[H]
-\centering\small
-\begin{tabularx}{\textwidth}{@{}P{2.4cm}P{2.6cm}RRRR@{}}
-\toprule
-& & \multicolumn{2}{c}{\textbf{Q-learning}} & \multicolumn{2}{c}{\textbf{Regla cautelosa}} \\
-\cmidrule(lr){3-4}\cmidrule(lr){5-6}
-\textbf{Casilla de enfrente} & \textbf{Obstáculo al lado} & Decisiones & Avanza (\%) & Decisiones & Avanza (\%) \\
-\midrule
-\filas{generado/tabla_politica.tex}
-\bottomrule
-\end{tabularx}
-\caption{Porcentaje de decisiones en las que se avanza, según la percepción (episodios de prueba).}
-\label{tab:politica}
-\end{table}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.46\textwidth]{ruta_aprendida.png}
+\caption{Rutas de la política greedy aprendida y de la regla en escalera.}
+\label{fig:ruta}
+\end{figure}
 
+Q-learning aprendió la secuencia \code{\RutaQL} (D: girar a la derecha, A: avanzar): gira hacia el este, recorre
+la fila 0, gira hacia el sur y baja por la columna 7. Son 16 pasos con \GirosQL{} giros. Que esta ruta sea mejor
+que la escalera, del mismo largo en avances, tiene dos explicaciones:
 \begin{itemize}
-  \item \textbf{Evita los obstáculos.} Con un obstáculo enfrente casi nunca avanza, y con la casilla de enfrente
-    en riesgo y nada a su lado avanza solo en casos puntuales.
-  \item \textbf{Huye cuando lo amenazan.} La diferencia clave con la regla cautelosa: si un obstáculo está a su
-    lado, quedarse girando también es peligroso, porque el obstáculo puede entrar en su casilla. Con la casilla
-    de enfrente libre, el agente siempre avanza para alejarse; si está en riesgo, lo hace en cerca de la mitad
-    de los casos. La regla cautelosa nunca lo hace: todas sus colisiones (\CausaCautGirando\,\%) ocurren
-    mientras gira. En el agente, el \CausaQLGirando\,\% de los choques ocurre girando, el \CausaQLAvanzando\,\%
-    avanzando y el \CausaQLCruce\,\% por cruce.
-  \item \textbf{Elige el camino.} Con todo libre no siempre avanza: a veces gira para tomar otra ruta, algo que
-    la regla no hace.
+  \item \textbf{Menos giros.} Cada giro es un paso más en el que un obstáculo puede llegar. La escalera necesita
+    14 giros y tarda 28 pasos; la ruta del borde, 2 giros y 16 pasos.
+  \item \textbf{Menos vecinas.} Una casilla del borde tiene 3 vecinas (2 en las esquinas) desde las que un
+    obstáculo puede entrar; una casilla interior tiene 4.
 \end{itemize}
+SARSA aprendió la ruta espejo (\code{\RutaSARSA}): primero baja por la columna 0 y luego va por la fila 7. Tiene
+un giro más, porque desde el norte hay que girar dos veces para mirar al sur, y llega a la meta en una
+proporción similar.
+
+De los choques de Q-learning, el \CausaAvanzando\,\% ocurre al avanzar hacia una casilla en la que entra o se
+queda un obstáculo, el \CausaCruce\,\% al cruzarse con uno y el \CausaGirando\,\% mientras gira. El
+\LugarFila\,\% ocurre en la fila 0, el \LugarEsquina\,\% en la esquina $(0,7)$ y el \LugarColumna\,\% en la
+columna 7.
 
 \subsection{La Q-tabla}
 
-La Q-tabla de Q-learning tiene \QLEstados{} estados visitados de los 8\,192 posibles: muchas combinaciones de
-percepción casi nunca ocurren en la práctica. Se entrega completa en
-\code{results/cuarto\_8x8/models/q\_learning\_qtable.csv}. El cuadro~\ref{tab:qtabla} muestra algunas filas;
-en negrita, la acción que elige el agente.
+La Q-tabla de Q-learning tiene \QLEstados{} de los 252 estados no terminales: el agente los visitó todos
+mientras exploraba. Se entrega completa en \code{results/cuarto\_8x8/models/q\_learning\_qtable.csv}. El
+cuadro~\ref{tab:qtabla} muestra algunas filas; en negrita, la acción que elige el agente.
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\textwidth}{@{}P{1.2cm}cP{1.6cm}cccRRR@{}}
+\begin{tabularx}{\textwidth}{@{}P{1.6cm}cRRR@{}}
 \toprule
-$(f,c)$ & $\theta$ & $\mathit{fr}$ & $\mathit{aq}$ & $\mathit{iz}$ & $\mathit{de}$ & $Q(\IZQ)$ & $Q(\DER)$ & $Q(\AV)$ \\
+$(f,c)$ & $\theta$ & $Q(\IZQ)$ & $Q(\DER)$ & $Q(\AV)$ \\
 \midrule
 \filas{generado/tabla_qtabla.tex}
 \bottomrule
@@ -255,21 +260,32 @@ $(f,c)$ & $\theta$ & $\mathit{fr}$ & $\mathit{aq}$ & $\mathit{iz}$ & $\mathit{de
 \label{tab:qtabla}
 \end{table}
 
-Los valores tienen sentido. En el inicio, mirando al norte, la mejor acción es girar a la derecha, hacia la
-meta. Mirando al este con la casilla libre conviene avanzar, pero si está en riesgo es mejor girar. Junto a la
-meta, avanzar vale exactamente $+100$. Los valores crecen a medida que el agente se acerca a la meta: son
-negativos en el inicio, porque descuentan el costo de los pasos y el riesgo de chocar en todo el camino, y
-positivos a mitad de camino.
+Los valores reflejan la ruta. En $(0,0)$ mirando al norte, lo mejor es girar a la derecha. En la fila 0
+mirando al este, avanzar. En la esquina $(0,7)$ mirando al este, girar a la derecha. En la columna 7 mirando al
+sur, avanzar, y en $(6,7)$ ese avance vale exactamente $+100$. Los valores crecen a lo largo de la ruta, de
+cerca de $-42$ en la salida a $+100$ junto a la meta. En la salida son negativos porque el agente choca antes de
+llegar en cerca de dos de cada tres episodios. El valor de $(0,0)$ es cercano a la recompensa media por
+episodio del cuadro~\ref{tab:resultados}.
+
+\subsection{Experimento adicional: ¿y si el agente viera los obstáculos?}
+
+Para medir cuánto pesa la regla de que el agente no ve los obstáculos, se entrenó la misma configuración con
+cuatro sensores adicionales (\code{configs/cuarto\_8x8\_sensores.yaml}): si la casilla de enfrente está libre, en
+riesgo, ocupada o es pared; si hay un obstáculo junto al agente; y si hay peligro a su izquierda o a su derecha.
+Con ellos la Q-tabla tiene hasta 8\,192 estados. Este experimento no es el ambiente del curso y no se usa en la
+entrega. Con \SEpisodios{} episodios, Q-learning con sensores llega a la meta en el \SQLExito\,\% de los mismos
+episodios de prueba (\DifSensores{} $\pm$ \DifSensoresci{} puntos más que sin sensores). Una regla cautelosa
+con esos sensores, que solo avanza si enfrente está libre, llega en el \SCautExito\,\%. Cerca de la mitad de
+los choques del agente oficial se evitarían si pudiera ver los obstáculos: el límite está en la información
+disponible, no en el aprendizaje.
 
 \subsection{Limitaciones}
 
 \begin{itemize}
-  \item El ambiente es difícil: incluso el agente entrenado choca en cerca del 40\,\% de los episodios. Con cinco
-    obstáculos que se mueven al azar en 62 casillas, hay situaciones en las que todas las acciones tienen riesgo
-    de colisión: girar deja al agente expuesto en su casilla y avanzar lo lleva a otra casilla amenazada.
-  \item $\phi(s)$ indica si hay amenaza, pero no cuántos obstáculos la causan ni desde dónde. Se probó una
-    percepción más detallada (cuántos obstáculos alrededor y si hay peligro detrás) y no mejoró en
-    150\,000 episodios: duplica los estados y necesita más entrenamiento.
+  \item Sin ver los obstáculos, ninguna política puede esquivarlos: lo único que se puede aprender es la ruta
+    con menos riesgo esperado. Por eso el agente choca en cerca de dos de cada tres episodios.
+  \item El agente iguala a la mejor regla fija, pero no la supera: con la información disponible, la ruta por el
+    borde parece ser la mejor posible. No lo demostramos formalmente.
 \end{itemize}
 
 % =====================================================================
@@ -294,8 +310,8 @@ positivos a mitad de camino.
 {\small
 \begin{verbatim}
 conda env create -f environment.yml && conda activate rl-warehouse-agent
-python -m pytest tests/test_gridworld.py          # 17 pruebas
-python experiments/cuarto_8x8/train.py            # entrena y evalúa (unos 10 min)
+python -m pytest tests/test_gridworld.py          # 20 pruebas
+python experiments/cuarto_8x8/train.py            # entrena y evalúa (unos minutos)
 python experiments/cuarto_8x8/demo.py             # carga la Q-tabla y graba el video
 python experiments/cuarto_8x8/demo.py --human     # lo muestra en una ventana
 \end{verbatim}
