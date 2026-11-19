@@ -1,0 +1,306 @@
+% =====================================================================
+%  Proyecto Aprendizaje por Refuerzo - Cuarto 8x8 con obstáculos móviles
+%  Entrega final: implementación, entrenamiento y evaluación
+%  Compilar con pdfLaTeX:  latexmk -pdf reporte_final.tex
+%  Las cifras de generado/ las produce experiments/cuarto_8x8/report_numbers.py
+% =====================================================================
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{babel}
+\babelprovide[import,main]{spanish}
+\usepackage{lmodern}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[colorlinks=true,linkcolor=azul,urlcolor=azul]{hyperref}
+
+\definecolor{azul}{HTML}{1F4E79}
+\titleformat{\section}{\Large\bfseries\color{azul}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{azul}}{\thesubsection}{0.6em}{}
+\captionsetup{font=small,labelfont=bf}
+\setlist{itemsep=2pt,topsep=4pt}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\emergencystretch}{2em}
+\graphicspath{{figuras/}{../../results/cuarto_8x8/figures/}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small Aprendizaje por Refuerzo -- Proyecto, entrega final}
+\rhead{\small Cuarto 8x8 con obstáculos móviles}
+\cfoot{\small \thepage}
+
+\newcommand{\IZQ}{\mathsf{GIRAR\_IZQ}}
+\newcommand{\DER}{\mathsf{GIRAR\_DER}}
+\newcommand{\AV}{\mathsf{AVANZAR}}
+\newcommand{\META}{s_{\mathrm{META}}}
+\newcommand{\COL}{s_{\mathrm{COL}}}
+% Rutas en monoespaciada que pueden partirse después de / y _
+\newcommand{\code}[1]{{\ttfamily\codebreaks#1\endcodebreaks}}
+\makeatletter
+\def\codebreaks#1\endcodebreaks{\@codebreaks#1\@nil}
+\def\@codebreaks#1{\ifx#1\@nil\else\ifx#1/\slash\else\ifx#1\_\_\allowbreak\else#1\fi\fi\expandafter\@codebreaks\fi}
+\makeatother
+\makeatletter\newcommand{\filas}[1]{\@@input #1 }\makeatother
+
+\input{generado/cifras.tex}
+
+\begin{document}
+
+\begin{center}
+  {\small Universidad de los Andes \textperiodcentered{} Maestría en Inteligencia Artificial}\\[2pt]
+  {\small Aprendizaje por Refuerzo \textperiodcentered{} Prof. Nicolás Cardozo}\\[10pt]
+  {\LARGE\bfseries\color{azul} Agente de RL en un cuarto 8x8\\[2pt] con obstáculos móviles}\\[8pt]
+  {\large Entrega final: implementación, entrenamiento y evaluación}\\[8pt]
+  Miguel Ángel Muñoz Layton \quad\textperiodcentered\quad Daniel F. Barrera Armendaris\\[2pt]
+  {\small Noviembre de 2026}
+\end{center}
+
+\vspace{4pt}
+\hrule
+\vspace{8pt}
+
+\section*{Resumen}
+
+Se implementó el ambiente del enunciado: un cuarto de $8\times8$ donde el agente parte de $(0,0)$, debe llegar
+a $(7,7)$ y no puede chocar con cinco obstáculos que se mueven al azar al mismo tiempo que él. Se entrenaron
+agentes de Q-learning y SARSA durante \Episodios{} episodios. Sin entrenar, el agente llega a la meta en el
+\RandExito\,\% de los episodios. Entrenado con Q-learning llega en el \textbf{\QLExito\,\%} (SARSA, \SARSAExito\,\%),
+por encima de una regla cautelosa diseñada a mano (\CautExito\,\%) y de una que va directo a la meta sin mirar
+los obstáculos (\DirExito\,\%). La diferencia frente a la regla cautelosa, medida en los mismos \TurnosPrueba{}
+episodios de prueba, es de \DifQL{} $\pm$ \DifQLci{} puntos porcentuales. La Q-tabla se guarda y se carga desde
+un archivo, y el video muestra al agente usando esa Q-tabla.
+
+% =====================================================================
+\section{Definición del problema}
+
+La definición completa (estados, acciones, recompensas y triplas $(s,a,s')$ verificadas) está en el documento
+\emph{Definición de estados, acciones y función de recompensa}. Aquí se resume.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{2.4cm}L@{}}
+\toprule
+\textbf{Elemento} & \textbf{Definición} \\
+\midrule
+Estado completo & $s=(f,c,\theta,o_1,\dots,o_5)$: posición y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Inicio: $(0,0)$ mirando al norte, obstáculos al azar. Terminales: $\META$ (llega a $(7,7)$) y $\COL$ (choca). Corte a los 200 pasos \\
+Estado de la Q-tabla & $\phi(s)=(f,c,\theta,\mathit{fr},\mathit{aq},\mathit{iz},\mathit{de})$: posición, orientación y percepción local. $\mathit{fr}$: casilla de enfrente libre, en riesgo, ocupada o pared. $\mathit{aq}$: hay un obstáculo al lado. $\mathit{iz},\mathit{de}$: peligro a los lados. 8\,192 combinaciones \\
+Acciones & $\IZQ$ y $\DER$ (girar $90^\circ$; siempre aplicables) y $\AV$ (a la casilla de enfrente; solo si existe) \\
+Dinámica & Cada obstáculo se queda o pasa a una vecina al azar (nunca a la meta), al mismo tiempo que el agente. Hay colisión si comparten casilla o se cruzan \\
+Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y cada giro; $-10$ por avanzar contra la pared (no ocurre con la máscara $A(s)$) \\
+\bottomrule
+\end{tabularx}
+\caption{Resumen del MDP.}
+\end{table}
+
+% =====================================================================
+\section{Implementación}
+
+El código está en el repositorio \href{https://github.com/panamiguell/rl-warehouse-agent}{panamiguell/rl-warehouse-agent}:
+
+\begin{itemize}
+  \item \code{src/rl\_gridworld/env.py}: el ambiente, compatible con Gymnasium. \code{reset} ubica al agente y
+    los obstáculos; \code{step} aplica la acción, mueve los obstáculos, detecta colisiones y devuelve la
+    recompensa; \code{action\_mask} da $A(s)$; \code{observe} calcula $\phi(s)$.
+  \item \code{src/rl\_gridworld/agent.py}: los agentes tabulares (Q-learning y SARSA) y la memoria del agente.
+    \code{TabularAgent.save(ruta)} guarda la Q-tabla con sus hiperparámetros en un archivo \code{.npz}, y
+    \code{TabularAgent.load(ruta)} la carga en un agente listo para actuar. La Q-tabla también se exporta
+    legible en CSV: una fila por estado y una columna por acción.
+  \item \code{src/rl\_gridworld/baselines.py}: tres reglas fijas de referencia. La \emph{aleatoria} hace lo
+    mismo que el agente antes de entrenar. La \emph{directa} va a la meta por el camino más corto sin mirar los
+    obstáculos. La \emph{cautelosa} solo avanza si la casilla de enfrente está libre y sin riesgo; si no, gira.
+  \item \code{experiments/cuarto\_8x8/}: entrenamiento y evaluación (\code{train.py}), video (\code{demo.py})
+    y cifras de este reporte (\code{report\_numbers.py}).
+  \item \code{tests/test\_gridworld.py}: 17 pruebas automáticas, entre ellas cada tripla $(s,a,s')$ del
+    documento de definición y el guardar/cargar de la Q-tabla.
+\end{itemize}
+
+\textbf{Actualizaciones.} Con $\delta = r + \gamma\,\hat{Q}(s') - Q(s,a)$ y $Q(s,a)\leftarrow Q(s,a)+\alpha\,\delta$,
+Q-learning usa $\hat{Q}(s')=\max_{a'\in A(s')}Q(s',a')$ y SARSA usa $\hat{Q}(s')=Q(s',a')$ con la acción que
+realmente toma. En $\META$ y $\COL$, $\hat{Q}(s')=0$. Si el episodio se corta por el límite de pasos, $s'$ no es
+terminal y se sigue estimando con $\max_{a'}Q(s',a')$.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{5.4cm}L@{}}
+\toprule
+\textbf{Parámetro} & \textbf{Valor} \\
+\midrule
+Episodios de entrenamiento & \Episodios{} por algoritmo \\
+Tasa de aprendizaje $\alpha$ / descuento $\gamma$ & \Alpha{} / \GammaF{} \\
+Exploración $\varepsilon$ & De \EpsIni{} a \EpsMin{}, decaimiento geométrico hasta el 80\,\% del entrenamiento \\
+Inicialización de la Q-tabla & $Q=0$ \\
+Evaluación & Política greedy (sin exploración) \\
+Semillas & Entrenamiento, validación y prueba disjuntas \\
+Q-tabla entregada & La del mejor punto de control en validación (\TurnosValidacion{} episodios cada 20\,000): episodio \QLCkpt{} \\
+Evaluación final & \TurnosPrueba{} episodios de prueba, los mismos para agentes y reglas \\
+\bottomrule
+\end{tabularx}
+\caption{Hiperparámetros y protocolo.}
+\end{table}
+
+% =====================================================================
+\clearpage
+\section{Resultados}
+
+\subsection{Curvas de aprendizaje}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{curvas_aprendizaje.png}
+\caption{Porcentaje de episodios de validación que llegan a la meta durante el entrenamiento.}
+\label{fig:curvas}
+\end{figure}
+
+Antes de entrenar, la Q-tabla está en ceros y el agente actúa al azar: casi nunca llega a la meta. En los
+primeros 20\,000 episodios Q-learning aprende el camino y ya supera a la regla directa; SARSA, que aprende
+con la política exploratoria, tarda un poco más. Desde unos 60\,000 episodios los dos rondan o superan el
+nivel de la regla cautelosa. La curva oscila unos puntos porque los obstáculos son aleatorios y
+$\phi(s)$ no distingue cuántos obstáculos amenazan al agente. Por eso se guarda la Q-tabla del mejor punto
+de control.
+
+\subsection{Evaluación en prueba}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}Lrrrrr@{}}
+\toprule
+\textbf{Política} & \textbf{Llega a la meta (\%)} & \textbf{Choca (\%)} & \textbf{Corte (\%)} & \textbf{Pasos si llega} & \textbf{Recompensa} \\
+\midrule
+\filas{generado/tabla_resultados.tex}
+\bottomrule
+\end{tabularx}
+\caption{Resultados en \TurnosPrueba{} episodios de prueba ($\pm$: intervalo de confianza del 95\,\%).}
+\label{tab:resultados}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{comparacion.png}
+\caption{Cómo termina cada episodio de prueba.}
+\end{figure}
+
+Como todas las políticas se evaluaron en los mismos episodios (misma posición inicial y mismos movimientos
+aleatorios de los obstáculos), la comparación es pareada. Frente a la regla cautelosa, Q-learning llega a la
+meta en \DifQL{} $\pm$ \DifQLci{} puntos porcentuales más de episodios: gana \SoloQL{} episodios que la regla
+pierde y pierde \SoloCautQL{} que la regla gana. SARSA mejora \DifSARSA{} $\pm$ \DifSARSAci{} puntos. Los dos
+agentes tardan unos pasos más que la regla cautelosa cuando llegan (\QLPasos{} contra \CautPasos{}): a
+cambio de chocar menos, a veces toman caminos más largos. Ningún episodio llega al límite de 200 pasos, así que el agente
+no se queda dando vueltas.
+
+\subsection{Qué aprendió el agente}
+
+El cuadro~\ref{tab:politica} muestra con qué frecuencia el agente avanza según lo que percibe enfrente y a su
+lado, comparado con la regla cautelosa.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{2.4cm}P{2.6cm}RRRR@{}}
+\toprule
+& & \multicolumn{2}{c}{\textbf{Q-learning}} & \multicolumn{2}{c}{\textbf{Regla cautelosa}} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+\textbf{Casilla de enfrente} & \textbf{Obstáculo al lado} & Decisiones & Avanza (\%) & Decisiones & Avanza (\%) \\
+\midrule
+\filas{generado/tabla_politica.tex}
+\bottomrule
+\end{tabularx}
+\caption{Porcentaje de decisiones en las que se avanza, según la percepción (episodios de prueba).}
+\label{tab:politica}
+\end{table}
+
+\begin{itemize}
+  \item \textbf{Evita los obstáculos.} Con un obstáculo enfrente casi nunca avanza, y con la casilla de enfrente
+    en riesgo y nada a su lado avanza solo en casos puntuales.
+  \item \textbf{Huye cuando lo amenazan.} La diferencia clave con la regla cautelosa: si un obstáculo está a su
+    lado, quedarse girando también es peligroso, porque el obstáculo puede entrar en su casilla. Con la casilla
+    de enfrente libre, el agente siempre avanza para alejarse; si está en riesgo, lo hace en cerca de la mitad
+    de los casos. La regla cautelosa nunca lo hace: todas sus colisiones (\CausaCautGirando\,\%) ocurren
+    mientras gira. En el agente, el \CausaQLGirando\,\% de los choques ocurre girando, el \CausaQLAvanzando\,\%
+    avanzando y el \CausaQLCruce\,\% por cruce.
+  \item \textbf{Elige el camino.} Con todo libre no siempre avanza: a veces gira para tomar otra ruta, algo que
+    la regla no hace.
+\end{itemize}
+
+\subsection{La Q-tabla}
+
+La Q-tabla de Q-learning tiene \QLEstados{} estados visitados de los 8\,192 posibles: muchas combinaciones de
+percepción casi nunca ocurren en la práctica. Se entrega completa en
+\code{results/cuarto\_8x8/models/q\_learning\_qtable.csv}. El cuadro~\ref{tab:qtabla} muestra algunas filas;
+en negrita, la acción que elige el agente.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{1.2cm}cP{1.6cm}cccRRR@{}}
+\toprule
+$(f,c)$ & $\theta$ & $\mathit{fr}$ & $\mathit{aq}$ & $\mathit{iz}$ & $\mathit{de}$ & $Q(\IZQ)$ & $Q(\DER)$ & $Q(\AV)$ \\
+\midrule
+\filas{generado/tabla_qtabla.tex}
+\bottomrule
+\end{tabularx}
+\caption{Extracto de la Q-tabla de Q-learning (n/a: acción no aplicable).}
+\label{tab:qtabla}
+\end{table}
+
+Los valores tienen sentido. En el inicio, mirando al norte, la mejor acción es girar a la derecha, hacia la
+meta. Mirando al este con la casilla libre conviene avanzar, pero si está en riesgo es mejor girar. Junto a la
+meta, avanzar vale exactamente $+100$. Los valores crecen a medida que el agente se acerca a la meta: son
+negativos en el inicio, porque descuentan el costo de los pasos y el riesgo de chocar en todo el camino, y
+positivos a mitad de camino.
+
+\subsection{Limitaciones}
+
+\begin{itemize}
+  \item El ambiente es difícil: incluso el agente entrenado choca en cerca del 40\,\% de los episodios. Con cinco
+    obstáculos que se mueven al azar en 62 casillas, hay situaciones en las que todas las acciones tienen riesgo
+    de colisión: girar deja al agente expuesto en su casilla y avanzar lo lleva a otra casilla amenazada.
+  \item $\phi(s)$ indica si hay amenaza, pero no cuántos obstáculos la causan ni desde dónde. Se probó una
+    percepción más detallada (cuántos obstáculos alrededor y si hay peligro detrás) y no mejoró en
+    150\,000 episodios: duplica los estados y necesita más entrenamiento.
+\end{itemize}
+
+% =====================================================================
+\section{Entregables y reproducción}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{7.6cm}L@{}}
+\toprule
+\textbf{Archivo} & \textbf{Contenido} \\
+\midrule
+\code{results/cuarto\_8x8/figures/demo.mp4} & Video: seis episodios del agente con la Q-tabla cargada desde el archivo \\
+\code{results/cuarto\_8x8/models/q\_learning.npz} & Q-tabla del agente (se carga con \code{TabularAgent.load}) \\
+\code{results/cuarto\_8x8/models/*\_qtable.csv} & Q-tablas legibles de Q-learning y SARSA \\
+\code{results/cuarto\_8x8/logs/} & Registros de las pruebas: entrenamiento, curvas, cada episodio de prueba y resúmenes \\
+\code{src/rl\_gridworld/}, \code{experiments/cuarto\_8x8/}, \code{tests/} & Código completo \\
+\bottomrule
+\end{tabularx}
+\caption{Entregables.}
+\end{table}
+
+{\small
+\begin{verbatim}
+conda env create -f environment.yml && conda activate rl-warehouse-agent
+python -m pytest tests/test_gridworld.py          # 17 pruebas
+python experiments/cuarto_8x8/train.py            # entrena y evalúa (unos 10 min)
+python experiments/cuarto_8x8/demo.py             # carga la Q-tabla y graba el video
+python experiments/cuarto_8x8/demo.py --human     # lo muestra en una ventana
+\end{verbatim}
+}
+
+Todos los resultados son reproducibles con las semillas fijas del código.
+
+\end{document}

@@ -1,0 +1,19 @@
+# Proyecto del curso: cuarto 8x8 con 5 obstáculos móviles (docs/proyecto_8x8).
+
+ambiente:
+  tamano: 8                 # cuarto de 8x8; inicio (0,0) mirando al norte, meta (7,7)
+  obstaculos: 5             # se mueven al azar en cada paso, al mismo tiempo que el agente
+  max_pasos: 200            # límite de pasos por episodio (corte, no estado terminal)
+  recompensas:
+    meta: 100               # llegar a (7,7)
+    colision: -100          # chocar con un obstáculo (incluye intercambio de casillas)
+    paso: -1                # cada AVANZAR que no termina el episodio
+    giro: -1                # cada giro que no termina el episodio
+    accion_invalida: -10    # AVANZAR contra la pared (solo si no se usa la máscara A(s))
+
+entrenamiento:
+  alpha: 0.05
+  gamma: 0.95
+  epsilon_inicial: 1.0
+  epsilon_minimo: 0.05      # se alcanza al 80 % del entrenamiento (decaimiento geométrico)
+  semilla: 0

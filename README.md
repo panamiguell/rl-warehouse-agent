@@ -1,22 +1,62 @@
 # rl-warehouse-agent
 
-Repositorio del proyecto del curso **Aprendizaje por Refuerzo** (Maestría en Inteligencia Artificial, Universidad de los Andes). Contiene la definición del ambiente, los agentes y los experimentos para entrenar y comparar algoritmos de RL en un problema de toma de decisiones secuenciales.
+Repositorio del proyecto del curso **Aprendizaje por Refuerzo** (Maestría en Inteligencia Artificial, Universidad de los Andes).
 
-**Problema:** un agente decide qué trabajo de picking liberar en un centro de distribución (un lote consolidado por zona de racks, una orden urgente o esperar) para recoger en una sola visita los SKU que piden varias órdenes, sin incumplir deadlines y considerando operarios libres y WIP.
+## Proyecto del curso: cuarto 8x8 con obstáculos móviles
+
+Un agente (triángulo) parte de la casilla (0,0) mirando al norte y debe llegar a la meta (7,7) sin chocar con cinco obstáculos que se mueven al azar en cada paso, al mismo tiempo que él. Puede girar 90° a la izquierda o a la derecha, o avanzar a la casilla de enfrente si existe.
+
+| Entregable | Archivo |
+| --- | --- |
+| Definición de estados, acciones y recompensas | [`docs/proyecto_8x8/definicion_ambiente.pdf`](docs/proyecto_8x8/definicion_ambiente.pdf) |
+| Reporte final | [`docs/proyecto_8x8/reporte_final.pdf`](docs/proyecto_8x8/reporte_final.pdf) |
+| Video del agente | [`results/cuarto_8x8/figures/demo.mp4`](results/cuarto_8x8/figures/demo.mp4) |
+| Q-tabla | [`results/cuarto_8x8/models/q_learning.npz`](results/cuarto_8x8/models/q_learning.npz) · [CSV legible](results/cuarto_8x8/models/q_learning_qtable.csv) |
+| Registros de las pruebas | [`results/cuarto_8x8/logs/`](results/cuarto_8x8/logs) |
+| Código | [`src/rl_gridworld/`](src/rl_gridworld) · [`experiments/cuarto_8x8/`](experiments/cuarto_8x8) · [`tests/test_gridworld.py`](tests/test_gridworld.py) |
+
+```powershell
+conda env create -f environment.yml
+conda activate rl-warehouse-agent
+python -m pytest tests/test_gridworld.py                # 17 pruebas, incluidas las triplas (s, a, s') del documento
+python experiments/cuarto_8x8/train.py                  # entrena Q-learning y SARSA y los compara con reglas fijas
+python experiments/cuarto_8x8/demo.py                   # carga la Q-tabla y graba el video
+python experiments/cuarto_8x8/demo.py --human           # lo muestra en una ventana
+```
+
+La Q-tabla se guarda con `TabularAgent.save(ruta)` y se carga con `TabularAgent.load(ruta)` (`src/rl_gridworld/agent.py`).
+
+**Resultados** (2 000 episodios de prueba; ± es el intervalo de confianza del 95 %):
+
+| Política | Llega a la meta | Choca | Pasos si llega |
+|---|---|---|---|
+| **Q-learning** | 58,6 % ± 2,2 | 41,4 % | 23,3 |
+| SARSA | 59,4 % ± 2,2 | 40,6 % | 23,0 |
+| Regla cautelosa | 53,1 % ± 2,2 | 46,9 % | 19,9 |
+| Regla directa | 33,1 % ± 2,1 | 66,8 % | 16,0 |
+| Aleatoria (sin entrenar) | 0,4 % ± 0,3 | 99,7 % | 65,3 |
+
+![Curvas de aprendizaje](results/cuarto_8x8/figures/curvas_aprendizaje.png)
+
+## Trabajo complementario: consolidación de picking en un centro de distribución
+
+Antes de enfocarnos en el ambiente del enunciado desarrollamos un agente para decidir qué trabajo de picking liberar en un centro de distribución (`src/rl_warehouse`, `docs/entrega1`, `docs/entrega_final`, `results/`). Se conserva como trabajo complementario; el resto de este documento lo describe.
 
 ## Estructura
 
 ```
 rl-warehouse-agent/
 ├── docs/                  Documentación y entregas del curso
-│   ├── entrega1/          Entrega 1: estados, acciones y recompensas (LaTeX + PDF), tal como se entregó
-│   ├── entrega_final/     Reporte final (LaTeX + PDF)
+│   ├── proyecto_8x8/      Proyecto del curso: definición del ambiente y reporte final (LaTeX + PDF)
+│   ├── entrega1/          Centro de distribución: Entrega 1 tal como se entregó
+│   ├── entrega_final/     Centro de distribución: reporte
 │   └── referencias/       Artículos y material de apoyo
 ├── data/
 │   ├── raw/               Datos originales (órdenes, ubicaciones de SKU) - no versionados
 │   ├── processed/         Datos limpios listos para el simulador - no versionados
 │   └── simulated/         Escenarios de órdenes generados - no versionados
-├── src/rl_warehouse/      Código fuente
+├── src/rl_gridworld/      Código del cuarto 8x8: ambiente, agentes, reglas y render
+├── src/rl_warehouse/      Código del centro de distribución
 │   ├── env/               Simulador del centro de distribución (MDP)
 │   ├── agents/            Agentes: Monte Carlo, SARSA, Q-learning, ...
 │   └── utils/             Semillas, logging, métricas
@@ -24,6 +64,7 @@ rl-warehouse-agent/
 ├── experiments/           Scripts de entrenamiento y comparación de agentes
 ├── notebooks/             Exploración y análisis de resultados
 ├── results/
+│   ├── cuarto_8x8/        Q-tablas, registros, figuras y video del cuarto 8x8
 │   ├── figures/           Gráficas para los informes
 │   ├── models/            Q-tablas entrenadas (.npz y .csv)
 │   ├── logs/              Registros de entrenamiento y evaluación
@@ -32,7 +73,7 @@ rl-warehouse-agent/
 └── requirements.txt
 ```
 
-## Entregas
+## Centro de distribución: entregas
 
 | Entrega | Contenido | Archivo |
 | --- | --- | --- |
@@ -55,7 +96,7 @@ Para actualizar el ambiente tras cambios en sus dependencias:
 conda env update -f environment.yml
 ```
 
-## Uso
+## Centro de distribución: uso
 
 ```powershell
 python -m pytest                                    # 29 pruebas, incluidas las triplas (s, a, s') de la Entrega 1
@@ -77,7 +118,7 @@ latexmk -pdf reporte_final.tex      # también docs/entrega1/entrega1_definicion
 latexmk -c                          # limpia archivos auxiliares
 ```
 
-## Resultados (2 zonas)
+## Centro de distribución: resultados (2 zonas)
 
 6 000 turnos de entrenamiento por algoritmo y evaluación greedy en 100 turnos de prueba, con las mismas semillas para agentes y reglas fijas. Promedios por turno de 8 h; ± es el intervalo de confianza del 95 %.
 

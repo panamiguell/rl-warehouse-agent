@@ -1,0 +1,107 @@
+{
+  "meta": {
+    "episodes": 200000,
+    "validation_episodes": 500,
+    "test_episodes": 2000,
+    "epsilon": [
+      1.0,
+      0.05
+    ],
+    "alpha": 0.05,
+    "gamma": 0.95,
+    "epsilon_inicial": 1.0,
+    "epsilon_minimo": 0.05,
+    "semilla": 0,
+    "ambiente": {
+      "tamano": 8,
+      "obstaculos": 5,
+      "max_pasos": 200,
+      "recompensas": {
+        "meta": 100,
+        "colision": -100,
+        "paso": -1,
+        "giro": -1,
+        "accion_invalida": -10
+      }
+    }
+  },
+  "results": {
+    "q_learning": {
+      "kind": "rl",
+      "checkpoint": 160000,
+      "states": 3938,
+      "success": 0.586,
+      "success_ci95": 0.02158688868734909,
+      "collision": 0.414,
+      "collision_ci95": 0.02158688868734909,
+      "truncated": 0.0,
+      "truncated_ci95": 0.0,
+      "reward": -0.885,
+      "reward_ci95": 4.120963604587543,
+      "steps_success": 23.262798634812288,
+      "steps": 19.085,
+      "episodes": 2000
+    },
+    "sarsa": {
+      "kind": "rl",
+      "checkpoint": 160000,
+      "states": 3940,
+      "success": 0.594,
+      "success_ci95": 0.021522727782509354,
+      "collision": 0.406,
+      "collision_ci95": 0.021522727782509354,
+      "truncated": 0.0,
+      "truncated_ci95": 0.0,
+      "reward": 0.85,
+      "reward_ci95": 4.110180528345171,
+      "steps_success": 22.98989898989899,
+      "steps": 18.95,
+      "episodes": 2000
+    },
+    "aleatoria": {
+      "kind": "regla",
+      "validation_success": 0.002,
+      "success": 0.0035,
+      "success_ci95": 0.002588294844101035,
+      "collision": 0.9965,
+      "collision_ci95": 0.0025882948441010157,
+      "truncated": 0.0,
+      "truncated_ci95": 0.0,
+      "reward": -125.3855,
+      "reward_ci95": 1.1946190991390577,
+      "steps_success": 65.28571428571429,
+      "steps": 27.0855,
+      "episodes": 2000
+    },
+    "directa": {
+      "kind": "regla",
+      "validation_success": 0.332,
+      "success": 0.3315,
+      "success_ci95": 0.020631630236120458,
+      "collision": 0.6685,
+      "collision_ci95": 0.020631630236120458,
+      "truncated": 0.0,
+      "truncated_ci95": 0.0,
+      "reward": -42.701,
+      "reward_ci95": 3.9449594651339543,
+      "steps_success": 16.0,
+      "steps": 10.001,
+      "episodes": 2000
+    },
+    "cautelosa": {
+      "kind": "regla",
+      "validation_success": 0.54,
+      "success": 0.531,
+      "success_ci95": 0.021871307944428015,
+      "collision": 0.469,
+      "collision_ci95": 0.021871307944428015,
+      "truncated": 0.0,
+      "truncated_ci95": 0.0,
+      "reward": -8.912,
+      "reward_ci95": 4.207199659941765,
+      "steps_success": 19.889830508474578,
+      "steps": 16.112,
+      "episodes": 2000
+    }
+  }
+}
