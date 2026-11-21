@@ -84,8 +84,7 @@ llega a la meta en el \RandExito\,\% de los episodios. Entrenado con Q-learning 
 \textbf{\QLExito\,\%}, y lo hace por una ruta que nadie le indicó: va por el borde, primero hacia la derecha y
 luego hacia abajo, con solo dos giros. Esa ruta es la mejor de las reglas que diseñamos a mano, y supera en
 \DifQLEsc{} $\pm$ \DifQLEscci{} puntos a la ruta en escalera por el centro. La Q-tabla se guarda y se carga
-desde un archivo, y el video muestra al agente usando esa Q-tabla. Como experimento adicional, se midió que si
-el agente pudiera ver los obstáculos llegaría a la meta en el \SQLExito\,\%.
+desde un archivo, y el video muestra al agente usando esa Q-tabla.
 
 % =====================================================================
 \section{Definición del problema}
@@ -99,10 +98,10 @@ La definición completa (estados, acciones, recompensas y triplas $(s,a,s')$ ver
 \toprule
 \textbf{Elemento} & \textbf{Definición} \\
 \midrule
-Estado del ambiente & $s=(f,c,\theta,o_1,\dots,o_5)$: posición y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Inicio: $(0,0)$ mirando al norte, obstáculos al azar. Terminales: $\META$ (llega a $(7,7)$) y $\COL$ (choca). Sin límite de pasos \\
-Observación del agente & $(f,c,\theta)$: el agente no ve los obstáculos, solo se entera chocando. Es la clave de la Q-tabla: 256 filas por 3 acciones \\
+Estado del ambiente & $s=(f,c,\theta,o_1,\dots,o_5)$: posición y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Inicio: $(0,0)$ mirando al norte, obstáculos al azar. Terminales: $\META$ (llega a $(7,7)$) y $\COL$ (choca); en ambos el episodio termina y el ambiente se reinicia en $(0,0)$ con obstáculos nuevos. Sin límite de pasos \\
+Observación del agente & $(f,c,\theta)$: el agente es ciego, sin sensores; no ve los obstáculos y solo se entera chocando. Es la clave de la Q-tabla: 256 filas por 3 acciones \\
 Acciones & $\IZQ$ y $\DER$ (girar $90^\circ$; siempre aplicables) y $\AV$ (a la casilla de enfrente; solo si existe) \\
-Dinámica & Cada obstáculo se queda o pasa a una vecina al azar (nunca a la salida ni a la meta, ni encima de otro), al mismo tiempo que el agente. Hay colisión si comparten casilla o se cruzan, también mientras el agente gira \\
+Dinámica & Aleatoria: cada obstáculo se queda o pasa a una vecina al azar, con igual probabilidad (nunca a la salida ni a la meta, ni encima de otro), al mismo tiempo que el agente. Hay colisión si comparten casilla o se cruzan, también mientras el agente gira \\
 Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y cada giro; $-10$ por avanzar contra la pared (no ocurre con la máscara $A(s)$). $\gamma=\GammaF$ \\
 \bottomrule
 \end{tabularx}
@@ -128,13 +127,13 @@ El código está en el repositorio \href{https://github.com/panamiguell/rl-wareh
     derecha y abajo por la diagonal. Las dos últimas son caminos de longitud mínima (14 avances).
   \item \code{experiments/cuarto\_8x8/}: entrenamiento y evaluación (\code{train.py}), video (\code{demo.py})
     y cifras de este reporte (\code{report\_numbers.py}).
-  \item \code{tests/test\_gridworld.py}: 20 pruebas automáticas, entre ellas cada tripla $(s,a,s')$ del
+  \item \code{tests/test\_gridworld.py}: 18 pruebas automáticas, entre ellas cada tripla $(s,a,s')$ del
     documento de definición, que el agente no ve los obstáculos y el guardar/cargar de la Q-tabla.
 \end{itemize}
 
 \textbf{Actualizaciones.} Con $\delta = r + \gamma\,\hat{Q}(x') - Q(x,a)$ y $Q(x,a)\leftarrow Q(x,a)+\alpha_t\,\delta$,
 Q-learning usa $\hat{Q}(x')=\max_{a'\in A(x')}Q(x',a')$ y SARSA usa $\hat{Q}(x')=Q(x',a')$ con la acción que
-realmente toma. En $\META$ y $\COL$, $\hat{Q}(x')=0$. Como el agente no ve los obstáculos, la misma acción en la
+realmente toma (Sutton y Barto, 2018, secs.~6.4 y~6.5). En $\META$ y $\COL$, $\hat{Q}(x')=0$. Como el agente no ve los obstáculos, la misma acción en la
 misma casilla a veces termina en choque y a veces no: las recompensas son muy ruidosas. Con una $\alpha$ fija
 los valores oscilaban y la política cambiaba de un punto de control a otro. Por eso la tasa de aprendizaje
 disminuye con las visitas a cada par: $\alpha_t(x,a)=\max(\AlphaMin,\ N(x,a)^{-\AlphaPot})$.
@@ -306,5 +305,9 @@ python experiments/cuarto_8x8/demo.py --human     # lo muestra en una ventana
 }
 
 Todos los resultados son reproducibles con las semillas fijas del código.
+
+\section*{Referencias}
+
+Sutton, R. S. y Barto, A. G. (2018). \emph{Reinforcement Learning: An Introduction} (2.ª ed.). MIT Press.
 
 \end{document}

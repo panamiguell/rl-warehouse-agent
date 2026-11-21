@@ -24,6 +24,7 @@
 \usepackage{caption}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{needspace}
 \usepackage[colorlinks=true,linkcolor=azul,urlcolor=azul]{hyperref}
 
 \definecolor{azul}{HTML}{1F4E79}
@@ -86,13 +87,17 @@ Recompensas & 4 & $R(s,a,s')$ para todos los casos: llegar a $(7,7)$ ($+100$), c
 Las reglas siguen el enunciado y las aclaraciones del curso en el foro: el agente no puede salir del cuarto;
 el agente y los obstáculos se mueven a la vez; hay choque si terminan en la misma casilla o se cruzan, también
 mientras el agente gira; los obstáculos no se superponen ni entran en la meta, y se recomienda que tampoco
-entren en la salida; el agente no ve los obstáculos (solo se entera chocando), y no hay límite de pasos.
+entren en la salida; los obstáculos se mueven de forma aleatoria; el agente es ciego: no tiene sensores y no
+ve los obstáculos (solo se entera chocando); al chocar, el episodio termina y el ambiente se reinicia, y no
+hay límite de pasos.
 
 El ambiente es un cuarto vacío de $8\times8$ casillas. El agente (triángulo negro) siempre empieza en la
 casilla superior izquierda $(0,0)$ y su objetivo es llegar a la casilla inferior derecha $(7,7)$ (cuadrado
 verde) sin estrellarse con ninguno de los cinco obstáculos (círculos azules). Los obstáculos aparecen en
 posiciones aleatorias y en cada paso se mueven al azar, al mismo tiempo que el agente actúa. Si el agente
-choca con un obstáculo, el episodio termina.
+choca con un obstáculo, el episodio termina y el ambiente se reinicia: el agente vuelve a $(0,0)$ mirando al
+norte y los obstáculos se colocan en posiciones nuevas al azar. Lo mismo ocurre cuando llega a la meta: el
+siguiente episodio empieza otra vez desde el estado inicial.
 
 \begin{figure}[H]
 \centering
@@ -132,7 +137,8 @@ donde cada estado en curso tiene las variables del cuadro~\ref{tab:estado}; el e
 ellos. Las posiciones de la salida $(0,0)$ y de la meta $(7,7)$ son fijas en todos los episodios: no cambian,
 así que son parámetros del ambiente y no variables del estado.
 
-\textbf{Definición de los estados terminales.} $\META$ y $\COL$ no tienen variables: al terminar el episodio ya no
+\textbf{Definición de los estados terminales.} $\META$ y $\COL$ son estados absorbentes (Sutton y Barto,
+2018, sec.~3.4) y no tienen variables: al terminar el episodio ya no
 importa dónde quedaron el agente ni los obstáculos, porque no hay más acciones ni recompensas. Cada uno se define
 por la condición que hace entrar en él. Sea $s=(f,c,\theta,o_1,\dots,o_5)$ el estado antes del paso y sean
 $(f',c')$, $\theta'$ y $o_1',\dots,o_5'$ la posición y la orientación del agente y las posiciones de los
@@ -148,7 +154,8 @@ obstáculos después de que el agente aplica su acción y los obstáculos se mue
 La primera condición cubre las tres formas de chocar: avanzar hacia un obstáculo que se queda, cruzarse con
 él, y que un obstáculo entre en la casilla del agente mientras gira (en ese caso $(f',c')=(f,c)$). En los
 dos terminales $A(\META)=A(\COL)=\emptyset$ y $V(\META)=V(\COL)=0$; la recompensa se recibe al entrar:
-$+100$ en $\META$ y $-100$ en $\COL$.
+$+100$ en $\META$ y $-100$ en $\COL$. Después de entrar en cualquiera de los dos, el ambiente se reinicia en
+$s_0$ con obstáculos nuevos al azar.
 
 \begin{table}[H]
 \centering\small
@@ -200,7 +207,7 @@ memoria y no dependen de pasos anteriores.
 
 \subsection{Lo que observa el agente: el estado de la Q-tabla}
 
-El agente no ve los obstáculos: solo se entera de que existen cuando choca. Lo que observa en cada paso es su
+El agente es ciego: no tiene sensores y no ve los obstáculos; solo se entera de que existen cuando choca. Lo que observa en cada paso es su
 posición y su orientación,
 \[
   x(s) = (f,\ c,\ \theta),
@@ -297,6 +304,7 @@ recorrido, y el agente aprendería a no salir nunca. Lo comprobamos al entrenar.
 menos riesgo esperado de colisión: corto y con pocos giros, porque cada paso y cada giro lo exponen a que un
 obstáculo entre en su casilla.
 
+\needspace{14\baselineskip}
 \subsection{Triplas \texorpdfstring{$(s,a,s')$}{(s,a,s')} de ejemplo}
 
 Notación: $s=(f,c,\theta\,|\,o_1,\dots,o_5)$. Salvo que se indique otra cosa, los obstáculos están lejos:
@@ -324,5 +332,9 @@ T10 & $(0,0,\theta\,|\,O)$ & $\IZQ$ o $\DER$ & $(0,0,\theta'\,|\,O')$ & Gira en 
 \end{tabularx}
 \caption{Ejemplos de $R(s,a,s')$. $O'$ son las posiciones de los obstáculos después de moverse.}
 \end{table}
+
+\section*{Referencias}
+
+Sutton, R. S. y Barto, A. G. (2018). \emph{Reinforcement Learning: An Introduction} (2.ª ed.). MIT Press.
 
 \end{document}
