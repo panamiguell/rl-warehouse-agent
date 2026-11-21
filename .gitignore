@@ -8,13 +8,6 @@ venv/
 .ipynb_checkpoints/
 .pytest_cache/
 
-# Datos (se conserva la estructura con .gitkeep). Los resultados (Q-tablas, registros y
-# gráficas en results/) SÍ se versionan: son entregables del proyecto.
-data/raw/*
-data/processed/*
-data/simulated/*
-!**/.gitkeep
-
 # LaTeX (el PDF compilado SÍ se versiona)
 *.aux
 *.log

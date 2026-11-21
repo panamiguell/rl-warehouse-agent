@@ -4,6 +4,6 @@ channels:
 dependencies:
   - python=3.12
   - pip
-  - ffmpeg          # para grabar el video con experiments/demo.py
+  - ffmpeg          # para grabar el video con experiments/cuarto_8x8/demo.py
   - pip:
       - -e .[dev]
