@@ -7,7 +7,6 @@ salida: results/cuarto_8x8
 ambiente:
   tamano: 8                 # cuarto de 8x8; inicio (0,0) mirando al norte, meta (7,7)
   obstaculos: 5             # se mueven al azar en cada paso, al mismo tiempo que el agente
-  percepcion: false         # el agente no ve los obstáculos: observa (fila, columna, orientación)
   salvaguarda_pasos: 1000   # corte de seguridad del simulador (el MDP no tiene límite de pasos)
   recompensas:
     meta: 100               # llegar a (7,7)

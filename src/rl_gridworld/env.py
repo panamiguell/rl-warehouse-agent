@@ -7,8 +7,7 @@ enfrente (solo si existe). La definición formal está en docs/proyecto_8x8.
 
 Reglas aclaradas por el curso (foro): el agente NO ve los obstáculos (solo se entera chocando),
 los obstáculos no se superponen ni entran en la salida (0,0) ni en la meta (7,7), y no hay
-límite de pasos. Por eso la observación del agente es (fila, columna, orientación). La opción
-``percepcion: true`` agrega sensores de obstáculos y se usa solo en un experimento adicional.
+límite de pasos. Por eso la observación del agente es (fila, columna, orientación).
 
 Coordenadas: (fila, columna), con (0,0) arriba a la izquierda y (7,7) abajo a la derecha.
 Orientación: 0 = Norte (arriba), 1 = Este, 2 = Sur, 3 = Oeste.
@@ -27,13 +26,9 @@ HEADINGS = ["N", "E", "S", "O"]
 DELTA = [(-1, 0), (0, 1), (1, 0), (0, -1)]           # desplazamiento de cada orientación
 MOVES = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)]    # obstáculo: quedarse o 4 vecinos
 
-# Percepción de una casilla (sensor frontal)
-LIBRE, RIESGO, OCUPADA, PARED = 0, 1, 2, 3
-
 DEFAULTS = {
     "tamano": 8,
     "obstaculos": 5,
-    "percepcion": False,       # el agente no ve los obstáculos (regla del curso)
     "salvaguarda_pasos": 1000, # corte de seguridad del simulador; el MDP no tiene límite de pasos
     "recompensas": {
         "meta": 100,
@@ -50,7 +45,7 @@ class ObstacleGridEnv(gym.Env):
 
     Estado completo (``full_state``): posición y orientación del agente y posiciones de los
     5 obstáculos, más la condición terminal. Observación del agente (``observe``):
-    (fila, columna, orientación); con ``percepcion`` se agregan (frente, aquí, izquierda, derecha).
+    (fila, columna, orientación).
     """
 
     metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
@@ -68,7 +63,6 @@ class ObstacleGridEnv(gym.Env):
         self.size = cfg["tamano"]
         self.n_obstacles = cfg["obstaculos"]
         self.max_steps = cfg["salvaguarda_pasos"]
-        self.perception = bool(cfg["percepcion"])
         self.rewards = cfg["recompensas"]
         if self.size < 3 or not 0 <= self.n_obstacles <= self.size ** 2 - 2 or self.max_steps < 1:
             raise ValueError("Tamaño, número de obstáculos o límite de pasos inválidos")
@@ -76,8 +70,7 @@ class ObstacleGridEnv(gym.Env):
         self.goal = (self.size - 1, self.size - 1)
         self.render_mode = render_mode
         self.action_space = spaces.Discrete(3)
-        dims = [self.size, self.size, 4] + ([4, 2, 2, 2] if self.perception else [])
-        self.observation_space = spaces.MultiDiscrete(dims)
+        self.observation_space = spaces.MultiDiscrete([self.size, self.size, 4])
         self.action_names = ACTION_NAMES
         self._fig = None
         self.reset()
@@ -111,25 +104,12 @@ class ObstacleGridEnv(gym.Env):
         """Obstáculo en la casilla o en una vecina (podría entrar en el próximo paso)."""
         return any(abs(o[0] - cell[0]) + abs(o[1] - cell[1]) <= 1 for o in self.obstacles)
 
-    def sense(self, cell):
-        if not self.inside(cell):
-            return PARED
-        if cell in self.obstacles:
-            return OCUPADA
-        return RIESGO if self._threat(cell) else LIBRE
-
     def observe(self):
-        """Observación del agente: (fila, col, θ); con percepción, además (frente, aquí, izq, der)."""
-        n = 7 if self.perception else 3
+        """Observación del agente: (fila, columna, orientación)."""
         if self.outcome is not None:
-            return np.zeros(n, dtype=np.int64)
+            return np.zeros(3, dtype=np.int64)
         r, c = self.agent
-        if not self.perception:
-            return np.array([r, c, self.heading], dtype=np.int64)
-        side = lambda h: int(self.sense(self.ahead(h)) in (RIESGO, OCUPADA))
-        here = int(any(abs(o[0] - r) + abs(o[1] - c) == 1 for o in self.obstacles))
-        return np.array([r, c, self.heading, self.sense(self.ahead()), here,
-                         side((self.heading - 1) % 4), side((self.heading + 1) % 4)], dtype=np.int64)
+        return np.array([r, c, self.heading], dtype=np.int64)
 
     def full_state(self):
         return dict(agente=self.agent, orientacion=HEADINGS[self.heading], obstaculos=list(self.obstacles),

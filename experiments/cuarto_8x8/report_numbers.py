@@ -2,8 +2,7 @@
 
     python experiments/cuarto_8x8/report_numbers.py
 
-Lee results/cuarto_8x8 (agente oficial, sin sensores) y results/cuarto_8x8_sensores
-(experimento adicional) y escribe docs/proyecto_8x8/generado/*.tex y
+Lee results/cuarto_8x8 y escribe docs/proyecto_8x8/generado/*.tex y
 docs/proyecto_8x8/figuras/ruta_aprendida.png. El reporte no tiene números copiados a mano.
 """
 import csv
@@ -21,14 +20,12 @@ sys.path.insert(0, str(ROOT / "src"))
 from rl_gridworld import AVANZAR, ObstacleGridEnv, TabularAgent  # noqa: E402
 from rl_gridworld.baselines import escalera  # noqa: E402
 
-OFFICIAL, SENSORS = ROOT / "results/cuarto_8x8", ROOT / "results/cuarto_8x8_sensores"
+OFFICIAL = ROOT / "results/cuarto_8x8"
 OUT, FIGS = ROOT / "docs/proyecto_8x8/generado", ROOT / "docs/proyecto_8x8/figuras"
 TEST_SEED = 1_000_000
 NAMES = {"q_learning": "Q-learning", "sarsa": "SARSA", "borde": "Regla: por el borde",
-         "escalera": "Regla: escalera por el centro", "aleatoria": "Aleatoria (sin entrenar)",
-         "cautelosa": "Regla cautelosa"}
-SHORT = {"q_learning": "QL", "sarsa": "SARSA", "borde": "Borde", "escalera": "Esc", "aleatoria": "Rand",
-         "cautelosa": "Caut"}
+         "escalera": "Regla: escalera por el centro", "aleatoria": "Aleatoria (sin entrenar)"}
+SHORT = {"q_learning": "QL", "sarsa": "SARSA", "borde": "Borde", "escalera": "Esc", "aleatoria": "Rand"}
 HEAD = "NESO"
 
 
@@ -91,26 +88,23 @@ def draw_routes(routes, path):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     official = json.loads((OFFICIAL / "logs/summary.json").read_text(encoding="utf-8"))
-    sensors = json.loads((SENSORS / "logs/summary.json").read_text(encoding="utf-8"))
     res, meta = official["results"], official["meta"]
     lines = []
 
     def macro(name, value):
         lines.append(f"\\newcommand{{\\{name}}}{{{value}}}")
 
-    for tag, results in (("", res), ("S", sensors["results"])):
-        for key, s in results.items():
-            short = tag + SHORT[key]
-            macro(f"{short}Exito", num(100 * s["success"], 1))
-            macro(f"{short}Exitoci", num(100 * s["success_ci95"], 1))
-            macro(f"{short}Choque", num(100 * s["collision"], 1))
-            macro(f"{short}Pasos", num(s["steps_success"], 1) if s["success"] > 0 else "--")
-            if "checkpoint" in s:
-                macro(f"{short}Ckpt", f"{s['checkpoint']:,}".replace(",", "\\,"))
-                macro(f"{short}Estados", f"{s['states']:,}".replace(",", "\\,"))
+    for key, s in res.items():
+        short = SHORT[key]
+        macro(f"{short}Exito", num(100 * s["success"], 1))
+        macro(f"{short}Exitoci", num(100 * s["success_ci95"], 1))
+        macro(f"{short}Choque", num(100 * s["collision"], 1))
+        macro(f"{short}Pasos", num(s["steps_success"], 1) if s["success"] > 0 else "--")
+        if "checkpoint" in s:
+            macro(f"{short}Ckpt", f"{s['checkpoint']:,}".replace(",", "\\,"))
+            macro(f"{short}Estados", f"{s['states']:,}".replace(",", "\\,"))
     hp = official["meta"]
     macro("Episodios", f"{meta['episodes']:,}".replace(",", "\\,"))
-    macro("SEpisodios", f"{sensors['meta']['episodes']:,}".replace(",", "\\,"))
     macro("TurnosPrueba", f"{meta['test_episodes']:,}".replace(",", "\\,"))
     macro("TurnosValidacion", str(meta["validation_episodes"]))
     macro("GammaF", num(hp["gamma"], 2))
@@ -129,13 +123,6 @@ def main():
         d = col("q_learning", "success") - col(key, "success")
         macro(f"DifQL{SHORT[key]}", num(100 * d.mean(), 1))
         macro(f"DifQL{SHORT[key]}ci", num(100 * 1.96 * d.std(ddof=1) / np.sqrt(len(d)), 1))
-    with (SENSORS / "logs/comparison.csv").open(encoding="utf-8") as stream:
-        srows = list(csv.DictReader(stream))
-    s_ql = np.array([float(r["success"]) for r in srows if r["policy"] == "q_learning"])
-    d = s_ql - col("q_learning", "success")
-    macro("DifSensores", num(100 * d.mean(), 1))
-    macro("DifSensoresci", num(100 * 1.96 * d.std(ddof=1) / np.sqrt(len(d)), 1))
-
     # Tabla de resultados oficiales
     table = []
     for key in ("q_learning", "sarsa", "borde", "escalera", "aleatoria"):

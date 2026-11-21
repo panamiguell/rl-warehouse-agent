@@ -25,13 +25,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from rl_gridworld import ACTION_NAMES, ALGORITHMS, ObstacleGridEnv, TabularAgent  # noqa: E402
-from rl_gridworld.baselines import policies_for, run_policy  # noqa: E402
+from rl_gridworld.baselines import POLICIES, run_policy  # noqa: E402
 
 # Semillas disjuntas: entrenamiento (0..N), validación y prueba.
 VALIDATION_SEED = 500_000
 TEST_SEED = 1_000_000
 LABELS = {"q_learning": "Q-learning", "sarsa": "SARSA", "borde": "Regla: por el borde",
-          "escalera": "Regla: escalera por el centro", "cautelosa": "Regla cautelosa (con sensores)",
+          "escalera": "Regla: escalera por el centro",
           "aleatoria": "Aleatoria (sin entrenar)"}
 
 
@@ -124,7 +124,7 @@ def main():
         write_csv(models / f"{algorithm}_qtable.csv", agent.to_rows(ACTION_NAMES))
         write_csv(logs / f"training_{algorithm}.csv", history)
 
-    for name, policy in policies_for(env).items():
+    for name, policy in POLICIES.items():
         rows = [run_policy(env, policy, TEST_SEED + i) for i in range(args.test_episodes)]
         comparison += [dict(policy=name, episode=i, **r) for i, r in enumerate(rows)]
         validation = [run_policy(env, policy, VALIDATION_SEED + i) for i in range(args.validation_episodes)]
@@ -174,7 +174,7 @@ def plot(curve, summary, figs):
     for algorithm, (x_end, y_end) in ends.items():
         ax.annotate(LABELS[algorithm], (x_end, y_end), xytext=(6, 0), textcoords="offset points",
                     va="center", fontsize=9, color=ink)
-    for rule, style in (("borde", "--"), ("escalera", ":"), ("cautelosa", "-.")):
+    for rule, style in (("borde", "--"), ("escalera", ":")):
         if rule in summary:
             ax.axhline(100 * summary[rule]["validation_success"], color=muted, lw=1.5, ls=style, label=LABELS[rule])
     ax.set_xlabel("Episodios de entrenamiento (miles)", color=ink)
@@ -189,7 +189,7 @@ def plot(curve, summary, figs):
     fig.savefig(figs / "curvas_aprendizaje.png")
     plt.close(fig)
 
-    order = [k for k in ("q_learning", "sarsa", "borde", "escalera", "cautelosa", "aleatoria") if k in summary]
+    order = [k for k in ("q_learning", "sarsa", "borde", "escalera", "aleatoria") if k in summary]
     fig, ax = plt.subplots(figsize=(9, 3.8), dpi=150)
     y = np.arange(len(order))
     parts = [("success", "Llega a la meta", "#1baf7a"), ("collision", "Choca", "#C0392B"),

@@ -95,7 +95,7 @@ class TabularAgent:
         return agent
 
     def to_rows(self, action_names):
-        names = ["fila", "columna", "orientacion", "frente", "aqui", "izquierda", "derecha"]
+        names = ["fila", "columna", "orientacion"]
         rows = []
         for key in sorted(self.q):
             row = dict(zip(names, key))

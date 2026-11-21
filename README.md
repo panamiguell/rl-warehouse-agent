@@ -18,7 +18,7 @@ Un agente (triángulo) parte de la casilla (0,0) mirando al norte y debe llegar 
 ```powershell
 conda env create -f environment.yml
 conda activate rl-warehouse-agent
-python -m pytest tests/test_gridworld.py                # 20 pruebas, incluidas las triplas (s, a, s') del documento
+python -m pytest tests/test_gridworld.py                # 18 pruebas, incluidas las triplas (s, a, s') del documento
 python experiments/cuarto_8x8/train.py                  # entrena Q-learning y SARSA y los compara con reglas fijas
 python experiments/cuarto_8x8/demo.py                   # carga la Q-tabla y graba el video
 python experiments/cuarto_8x8/demo.py --human           # lo muestra en una ventana
@@ -36,6 +36,6 @@ La Q-tabla se guarda con `TabularAgent.save(ruta)` y se carga con `TabularAgent.
 | Regla: escalera por el centro | 15,9 % ± 1,6 | 84,1 % | 28,0 |
 | Aleatoria (sin entrenar) | 0,4 % ± 0,3 | 99,6 % | 71,4 |
 
-El agente aprendió por su cuenta la ruta por el borde (derecha por la fila 0 y abajo por la columna 7, con dos giros), que es la de menos riesgo cuando no se ven los obstáculos. Como experimento adicional (`configs/cuarto_8x8_sensores.yaml`, no es el ambiente del curso), con sensores de obstáculos Q-learning llega a la meta en el 65,2 %.
+El agente aprendió por su cuenta la ruta por el borde (derecha por la fila 0 y abajo por la columna 7, con dos giros), que es la de menos riesgo cuando no se ven los obstáculos.
 
 ![Ruta aprendida](docs/proyecto_8x8/figuras/ruta_aprendida.png)

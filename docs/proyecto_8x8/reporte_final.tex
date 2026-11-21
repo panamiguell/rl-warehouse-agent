@@ -267,18 +267,6 @@ cerca de $-42$ en la salida a $+100$ junto a la meta. En la salida son negativos
 llegar en cerca de dos de cada tres episodios. El valor de $(0,0)$ es cercano a la recompensa media por
 episodio del cuadro~\ref{tab:resultados}.
 
-\subsection{Experimento adicional: ¿y si el agente viera los obstáculos?}
-
-Para medir cuánto pesa la regla de que el agente no ve los obstáculos, se entrenó la misma configuración con
-cuatro sensores adicionales (\code{configs/cuarto\_8x8\_sensores.yaml}): si la casilla de enfrente está libre, en
-riesgo, ocupada o es pared; si hay un obstáculo junto al agente; y si hay peligro a su izquierda o a su derecha.
-Con ellos la Q-tabla tiene hasta 8\,192 estados. Este experimento no es el ambiente del curso y no se usa en la
-entrega. Con \SEpisodios{} episodios, Q-learning con sensores llega a la meta en el \SQLExito\,\% de los mismos
-episodios de prueba (\DifSensores{} $\pm$ \DifSensoresci{} puntos más que sin sensores). Una regla cautelosa
-con esos sensores, que solo avanza si enfrente está libre, llega en el \SCautExito\,\%. Cerca de la mitad de
-los choques del agente oficial se evitarían si pudiera ver los obstáculos: el límite está en la información
-disponible, no en el aprendizaje.
-
 \subsection{Limitaciones}
 
 \begin{itemize}
@@ -310,7 +298,7 @@ disponible, no en el aprendizaje.
 {\small
 \begin{verbatim}
 conda env create -f environment.yml && conda activate rl-warehouse-agent
-python -m pytest tests/test_gridworld.py          # 20 pruebas
+python -m pytest tests/test_gridworld.py          # 18 pruebas
 python experiments/cuarto_8x8/train.py            # entrena y evalúa (unos minutos)
 python experiments/cuarto_8x8/demo.py             # carga la Q-tabla y graba el video
 python experiments/cuarto_8x8/demo.py --human     # lo muestra en una ventana

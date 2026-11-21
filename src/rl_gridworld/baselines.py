@@ -1,12 +1,10 @@
 """Políticas de referencia (reglas fijas) para el cuarto 8x8.
 
-Cada política recibe (env, observación, máscara, rng) y devuelve una acción de A(s). Las reglas
-``aleatoria``, ``borde`` y ``escalera`` no ven los obstáculos, igual que el agente del curso;
-``cautelosa`` usa los sensores y solo aplica al experimento con percepción.
+Cada política recibe (env, observación, máscara, rng) y devuelve una acción de A(s).
 """
 import numpy as np
 
-from .env import AVANZAR, GIRAR_DER, GIRAR_IZQ, LIBRE
+from .env import AVANZAR, GIRAR_DER, GIRAR_IZQ
 
 
 def aleatoria(env, obs, mask, rng):
@@ -37,22 +35,7 @@ def escalera(env, obs, mask, rng):
     return _go(env, 1 if c <= r else 2)
 
 
-def cautelosa(env, obs, mask, rng):
-    """Con sensores: como ``borde``, pero solo avanza si la casilla de enfrente está libre y sin
-    riesgo; si no, gira en el lugar."""
-    action = borde(env, obs, mask, rng)
-    if action == AVANZAR and obs[3] != LIBRE:
-        return GIRAR_DER
-    return action
-
-
 POLICIES = {"aleatoria": aleatoria, "borde": borde, "escalera": escalera}
-SENSOR_POLICIES = {"cautelosa": cautelosa}
-
-
-def policies_for(env):
-    """Reglas aplicables: las que usan sensores solo si el ambiente tiene percepción."""
-    return {**POLICIES, **(SENSOR_POLICIES if env.perception else {})}
 
 
 def run_policy(env, policy, seed):

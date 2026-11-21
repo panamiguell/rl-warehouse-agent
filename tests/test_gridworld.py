@@ -4,7 +4,7 @@ import pytest
 from gymnasium.utils.env_checker import check_env
 
 from rl_gridworld import AVANZAR, GIRAR_DER, GIRAR_IZQ, ObstacleGridEnv, TabularAgent
-from rl_gridworld.baselines import POLICIES, SENSOR_POLICIES, run_policy
+from rl_gridworld.baselines import POLICIES, run_policy
 
 
 def scenario(agent, heading, obstacles, moved=None):
@@ -128,21 +128,10 @@ def test_obstacles_random_walk_reaches_board():
         env.obstacles = after
 
 
-def test_perception_experiment():
-    env = ObstacleGridEnv({"percepcion": True})
-    env.reset(seed=0)
-    env.agent, env.heading, env.obstacles = (2, 2), 1, [(2, 3), (3, 1), (0, 1), (6, 6), (5, 5)]
-    r, c, h, front, here, left, right = env.observe()
-    assert (r, c, h) == (2, 2, 1) and front == 2 and here == 1     # frente ocupada; vecino en (2,3)
-    assert left == 0 and right == 1                                  # (1,2) libre; (3,2) en riesgo por (3,1)
-    env.agent, env.heading, env.obstacles = (0, 3), 0, FAR
-    assert env.observe()[3] == 3                                     # frente: pared
-
-
-@pytest.mark.parametrize("name", list(POLICIES) + list(SENSOR_POLICIES))
+@pytest.mark.parametrize("name", list(POLICIES))
 def test_baselines_run(name):
-    policy = {**POLICIES, **SENSOR_POLICIES}[name]
-    env = ObstacleGridEnv({"percepcion": name in SENSOR_POLICIES})
+    policy = POLICIES[name]
+    env = ObstacleGridEnv()
     result = run_policy(env, policy, seed=1)
     assert result["success"] + result["collision"] + result["truncated"] == 1
 
