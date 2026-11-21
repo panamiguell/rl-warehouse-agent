@@ -284,7 +284,7 @@ episodio del cuadro~\ref{tab:resultados}.
 \toprule
 \textbf{Archivo} & \textbf{Contenido} \\
 \midrule
-\code{results/cuarto\_8x8/figures/demo.mp4} & Video: seis episodios del agente con la Q-tabla cargada desde el archivo \\
+\code{results/cuarto\_8x8/figures/demo.mp4} & Video: \VideoEpisodios{} episodios del agente (\VideoDuracion{} min) con la Q-tabla cargada desde el archivo \\
 \code{results/cuarto\_8x8/models/q\_learning.npz} & Q-tabla del agente (se carga con \code{TabularAgent.load}) \\
 \code{results/cuarto\_8x8/models/*\_qtable.csv} & Q-tablas legibles de Q-learning y SARSA \\
 \code{results/cuarto\_8x8/logs/} & Registros de las pruebas: entrenamiento, curvas, cada episodio de prueba y resúmenes \\
@@ -293,6 +293,13 @@ episodio del cuadro~\ref{tab:resultados}.
 \end{tabularx}
 \caption{Entregables.}
 \end{table}
+
+\textbf{El video.} Muestra \VideoEpisodios{} episodios seguidos, con semillas que no se usaron ni al entrenar ni
+al evaluar, y el agente actuando siempre con la acción de mayor valor en la Q-tabla cargada. Llega a la meta en
+\VideoMeta{} de los \VideoEpisodios{} (\VideoExito\,\%) y choca en los demás. Es menos que el \QLExito\,\% de la
+prueba, pero \VideoEpisodios{} episodios son una muestra pequeña: con \TurnosPrueba{} episodios a partir de las
+mismas semillas del video, el agente llega en el \VideoExitoLargo\,\%, prácticamente lo mismo que en la prueba. No elegimos las
+semillas para mostrar más llegadas: el video es una muestra al azar del comportamiento real del agente.
 
 {\small
 \begin{verbatim}

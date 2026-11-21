@@ -1,10 +1,11 @@
 """Carga la Q-tabla entrenada y graba episodios del agente en el cuarto 8x8 (video de la entrega).
 
-    python experiments/cuarto_8x8/demo.py                                   # Q-learning, 6 episodios
+    python experiments/cuarto_8x8/demo.py                                   # Q-learning, 30 episodios
     python experiments/cuarto_8x8/demo.py --model results/cuarto_8x8/models/sarsa.npz
     python experiments/cuarto_8x8/demo.py --human                           # ventana en vivo
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default=str(ROOT / "configs/cuarto_8x8.yaml"))
     parser.add_argument("--model", type=Path, default=ROOT / "results/cuarto_8x8/models/q_learning.npz")
-    parser.add_argument("--episodes", type=int, default=6)
+    parser.add_argument("--episodes", type=int, default=30)
     parser.add_argument("--seed", type=int, default=2_000_000, help="Semillas no usadas al entrenar")
     parser.add_argument("--output", type=Path, default=ROOT / "results/cuarto_8x8/figures/demo.mp4")
     parser.add_argument("--fps", type=int, default=4)
@@ -51,6 +52,12 @@ def main():
         return
     save_video(frames, args.output, args.fps)
     print(f"Video: {args.output}")
+    # Resumen del video para el reporte (lo lee report_numbers.py)
+    summary = dict(model=args.model.name, algorithm=agent.algorithm, episodes=len(results),
+                   seeds=[args.seed, args.seed + args.episodes - 1], successes=results.count("meta"),
+                   collisions=results.count("colision"), seconds=len(frames) / args.fps, outcomes=results)
+    log = ROOT / "results/cuarto_8x8/logs/demo.json"
+    log.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def save_video(frames, path, fps):

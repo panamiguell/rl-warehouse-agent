@@ -113,6 +113,22 @@ def main():
     macro("EpsIni", num(meta["epsilon"][0], 1))
     macro("EpsMin", num(meta["epsilon"][1], 2))
 
+    # Video de la entrega (resumen que escribe demo.py)
+    demo = json.loads((OFFICIAL / "logs/demo.json").read_text(encoding="utf-8"))
+    macro("VideoEpisodios", str(demo["episodes"]))
+    macro("VideoMeta", str(demo["successes"]))
+    macro("VideoExito", num(100 * demo["successes"] / demo["episodes"], 0))
+    minutes, seconds = divmod(round(demo["seconds"]), 60)
+    macro("VideoDuracion", f"{minutes}:{seconds:02d}")
+    # Las mismas semillas del video, extendidas a tantos episodios como la prueba: muestra que la
+    # diferencia con la prueba es por el tamaño de la muestra y no por las semillas elegidas.
+    video_env = ObstacleGridEnv(yaml.safe_load((ROOT / "configs/cuarto_8x8.yaml").read_text(encoding="utf-8"))
+                                .get("ambiente", {}))
+    video_agent = TabularAgent.load(OFFICIAL / "models" / demo["model"])
+    long_run = [video_agent.episode(video_env, seed=demo["seeds"][0] + i, train=False)["success"]
+                for i in range(meta["test_episodes"])]
+    macro("VideoExitoLargo", num(100 * np.mean(long_run), 1))
+
     # Comparaciones pareadas (mismos episodios de prueba)
     with (OFFICIAL / "logs/comparison.csv").open(encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
