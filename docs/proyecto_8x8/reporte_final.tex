@@ -312,8 +312,10 @@ muevan los obstáculos, que el agente no ve. Lo observado coincide con lo espera
     que chocar, y el agente prefiere intentarlo.
   \item \textbf{La política cambiaba de un control a otro.} Con una tasa de aprendizaje fija, los valores
     oscilaban por el ruido de los choques y en algunos puntos de control la política greedy quedaba girando en
-    un mismo sitio (0\,\% de llegadas en la figura~\ref{fig:curvas}). Lo corregimos con la tasa que disminuye
-    con las visitas, y por eso entregamos la Q-tabla del mejor punto de control en validación.
+    un mismo sitio (0\,\% de llegadas). La tasa que disminuye con las visitas lo redujo, pero mientras la
+    exploración es alta todavía ocurre: en la figura~\ref{fig:curvas}, Q-learning cae a 0\,\% en algunos puntos de
+    control de los primeros 20\,000 episodios. Por eso entregamos la Q-tabla del mejor punto de control en
+    validación y no la del último episodio.
   \item \textbf{SARSA aprendió otra ruta.} En lugar de ir por la fila 0, SARSA baja primero por la columna 0
     y luego va por la fila 7, con un giro más. Las dos rutas tienen un riesgo casi igual y SARSA llega en una
     proporción similar (\SARSAExito\,\%); la diferencia con Q-learning está dentro del intervalo de confianza.
@@ -336,33 +338,31 @@ muevan los obstáculos, que el agente no ve. Lo observado coincide con lo espera
 
 El entrenamiento y la evaluación se corrieron con \code{experiments/cuarto\_8x8/train.py}, que registra los
 tiempos y el equipo en \code{results/cuarto\_8x8/logs/summary.json}. El código es Python de un solo hilo: usa
-un núcleo del procesador y no usa GPU.
+un núcleo del procesador y no usa GPU. El cuadro~\ref{tab:tiempos} resume el equipo, el software y los tiempos.
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\textwidth}{@{}P{5.6cm}L@{}}
+\begin{tabularx}{\textwidth}{@{}P{4.3cm}L@{}}
 \toprule
 \textbf{Elemento} & \textbf{Valor} \\
 \midrule
-Procesador & \CPU{} (\Nucleos{} núcleos virtuales) \\
-Memoria RAM & \RAM{} GB \\
-GPU & No se usa \\
+Equipo & \CPU{} (\Nucleos{} núcleos virtuales), \RAM{} GB de RAM, sin GPU \\
 Sistema operativo & \SO{} (máquina virtual en la nube) \\
 Software & Python \VerPy{}, NumPy \VerNumpy{}, Gymnasium \VerGym{}, Matplotlib \VerMpl{}, PyYAML \VerYaml{} \\
 \midrule
-Entrenamiento de Q-learning (\Episodios{} episodios) & \TQLEnt{} (\TQLMsEp{} ms por episodio); \TQLEntVal{} con las validaciones periódicas \\
-Entrenamiento de SARSA (\Episodios{} episodios) & \TSARSAEnt{} (\TSARSAMsEp{} ms por episodio); \TSARSAEntVal{} con las validaciones periódicas \\
-Prueba (\TurnosPrueba{} episodios por agente) & \TQLPrueba{} (Q-learning), \TSARSAPrueba{} (SARSA) \\
-Corrida completa de \code{train.py} & \TTotal{} (dos agentes, cinco políticas evaluadas, figuras) \\
-Generación del video (\VideoEpisodios{} episodios) & \TVideo{} \\
+Entrenar Q-learning & \TQLEnt{} por \Episodios{} episodios (\TQLMsEp{} ms cada uno); \TQLEntVal{} con validaciones \\
+Entrenar SARSA & \TSARSAEnt{} por \Episodios{} episodios (\TSARSAMsEp{} ms cada uno); \TSARSAEntVal{} con validaciones \\
+Prueba & \TQLPrueba{} por agente (\TurnosPrueba{} episodios) \\
+Corrida completa de \code{train.py} & \TTotal{} (dos agentes, cinco políticas evaluadas y figuras) \\
+Generar el video & \TVideo{} (\VideoEpisodios{} episodios) \\
 \bottomrule
 \end{tabularx}
 \caption{Equipo, software y tiempos de ejecución.}
 \label{tab:tiempos}
 \end{table}
 
-El entrenamiento es rápido porque la Q-tabla es pequeña: \QLEstados{} estados por 3 acciones. Casi todo el
-tiempo se va en simular el movimiento de los obstáculos. La corrida es determinista: con las mismas semillas,
+El entrenamiento es rápido porque la Q-tabla es pequeña: \QLEstados{} estados por 3 acciones, y cada episodio
+dura pocos pasos. La corrida es determinista: con las mismas semillas,
 volver a entrenar reproduce exactamente la misma Q-tabla y los mismos resultados.
 
 % =====================================================================
