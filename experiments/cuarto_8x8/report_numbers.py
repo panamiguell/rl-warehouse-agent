@@ -113,6 +113,31 @@ def main():
     macro("EpsIni", num(meta["epsilon"][0], 1))
     macro("EpsMin", num(meta["epsilon"][1], 2))
 
+    # Tiempo de ejecución y equipo (los registra train.py)
+    def dur(seconds):
+        seconds = round(seconds)
+        return f"{seconds // 60}\\,min {seconds % 60}\\,s" if seconds >= 60 else f"{seconds}\\,s"
+
+    def tex(text):
+        text = str(text).replace("(R)", "").replace("(TM)", "").replace(" Processor", "").replace("@", "a")
+        return " ".join(text.split()).replace("_", "\\_")
+
+    system = meta["system"]
+    macro("CPU", tex(system["cpu"]))
+    macro("Nucleos", str(system["cores"]))
+    macro("RAM", num(system["ram_gb"], 1))
+    macro("SO", tex(system["os"]))
+    for key, name in (("python", "Py"), ("numpy", "Numpy"), ("gymnasium", "Gym"), ("matplotlib", "Mpl"),
+                      ("pyyaml", "Yaml")):
+        macro(f"Ver{name}", tex(system[key]))
+    for key in ("q_learning", "sarsa"):
+        s = res[key]
+        macro(f"T{SHORT[key]}Ent", dur(s["train_seconds"]))
+        macro(f"T{SHORT[key]}EntVal", dur(s["train_validation_seconds"]))
+        macro(f"T{SHORT[key]}Prueba", dur(s["test_seconds"]))
+        macro(f"T{SHORT[key]}MsEp", num(1000 * s["train_seconds"] / meta["episodes"], 1))
+    macro("TTotal", dur(meta["total_seconds"]))
+
     # Video de la entrega (resumen que escribe demo.py)
     demo = json.loads((OFFICIAL / "logs/demo.json").read_text(encoding="utf-8"))
     macro("VideoEpisodios", str(demo["episodes"]))
@@ -120,6 +145,7 @@ def main():
     macro("VideoExito", num(100 * demo["successes"] / demo["episodes"], 0))
     minutes, seconds = divmod(round(demo["seconds"]), 60)
     macro("VideoDuracion", f"{minutes}:{seconds:02d}")
+    macro("TVideo", dur(demo["generation_seconds"]))
     # Las mismas semillas del video, extendidas a tantos episodios como la prueba: muestra que la
     # diferencia con la prueba es por el tamaño de la muestra y no por las semillas elegidas.
     video_env = ObstacleGridEnv(yaml.safe_load((ROOT / "configs/cuarto_8x8.yaml").read_text(encoding="utf-8"))

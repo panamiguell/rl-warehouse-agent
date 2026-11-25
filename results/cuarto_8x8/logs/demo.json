@@ -9,6 +9,7 @@
   "successes": 5,
   "collisions": 25,
   "seconds": 134.5,
+  "generation_seconds": 60.2,
   "outcomes": [
     "colision",
     "colision",

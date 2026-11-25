@@ -8,12 +8,14 @@ Salidas en results/cuarto_8x8/:
     logs/training_<algoritmo>.csv   promedios cada 1 000 episodios de entrenamiento
     logs/learning_curve.csv         evaluación greedy periódica en semillas de validación
     logs/comparison.csv             evaluación final por episodio (agentes y reglas, mismas semillas)
-    logs/summary.json, summary.md   resultados finales
+    logs/summary.json, summary.md   resultados finales, tiempos de ejecución y equipo usado
     figures/curvas_aprendizaje.png, figures/comparacion.png
 """
 import argparse
 import csv
 import json
+import os
+import platform
 import sys
 import time
 from pathlib import Path
@@ -49,6 +51,32 @@ def summarize(rows):
     out["steps"] = float(np.mean([r["steps"] for r in rows]))
     out["episodes"] = n
     return out
+
+
+def system_info():
+    """Equipo y software en el que se corre el entrenamiento (para el reporte)."""
+    import gymnasium
+    import matplotlib
+
+    cpu = platform.processor() or platform.machine()
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as stream:
+            cpu = next(line.split(":", 1)[1].strip() for line in stream if line.startswith("model name"))
+    except (OSError, StopIteration):
+        pass
+    try:
+        ram = round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1)
+    except (ValueError, OSError, AttributeError):
+        ram = None
+    system = f"{platform.system()} {platform.release()}"
+    try:
+        with open("/etc/os-release", encoding="utf-8") as stream:
+            system = next(line.split("=", 1)[1].strip().strip('"') for line in stream if line.startswith("PRETTY_NAME"))
+    except (OSError, StopIteration):
+        pass
+    return dict(cpu=cpu, cores=os.cpu_count(), ram_gb=ram, gpu="no se usa", os=system,
+                python=platform.python_version(), numpy=np.__version__, gymnasium=gymnasium.__version__,
+                matplotlib=matplotlib.__version__, pyyaml=yaml.__version__)
 
 
 def write_csv(path, rows):
@@ -87,13 +115,15 @@ def main():
     eps0, eps_min = hp.get("epsilon_inicial", 1.0), hp.get("epsilon_minimo", 0.05)
     decay = (eps_min / eps0) ** (1 / max(1, int(0.8 * args.episodes)))
     curve, comparison, summary = [], [], {}
+    run_start = time.perf_counter()
 
     for algorithm in args.algorithms:
         agent = TabularAgent(3, algorithm, alpha=hp.get("alpha_minima", 0.01), gamma=hp.get("gamma", 0.99),
                              epsilon=eps0, epsilon_min=eps_min, epsilon_decay=decay, seed=hp.get("semilla", 0),
                              alpha_power=hp.get("alpha_potencia", 0.7))
         best = dict(success=-1.0, episode=0, q=None)
-        history, window, start = [], [], time.time()
+        history, window, start = [], [], time.perf_counter()
+        train_time = 0.0                                # solo los episodios de entrenamiento
 
         def checkpoint(episode):
             stats = summarize([agent.episode(env, seed=VALIDATION_SEED + i, train=False)
@@ -103,11 +133,13 @@ def main():
                 best.update(success=stats["success"], episode=episode, q={k: v.copy() for k, v in agent.q.items()})
             print(json.dumps(dict(algorithm=algorithm, episode=episode, success=round(stats["success"], 3),
                                   collision=round(stats["collision"], 3), states=len(agent.q),
-                                  minutes=round((time.time() - start) / 60, 1))), flush=True)
+                                  minutes=round((time.perf_counter() - start) / 60, 1))), flush=True)
 
         checkpoint(0)
         for i in range(args.episodes):
+            tic = time.perf_counter()
             window.append(agent.episode(env, seed=i))
+            train_time += time.perf_counter() - tic
             if (i + 1) % 1000 == 0:
                 history.append(dict(episode=i + 1, epsilon=round(agent.epsilon, 4),
                                     **{k: round(v, 4) for k, v in summarize(window).items()
@@ -115,11 +147,16 @@ def main():
                 window = []
             if (i + 1) % args.eval_every == 0:
                 checkpoint(i + 1)
+        total_time = time.perf_counter() - start         # entrenamiento + validaciones periódicas
         agent.q.clear()
         agent.q.update(best["q"])
+        tic = time.perf_counter()
         rows = [agent.episode(env, seed=TEST_SEED + i, train=False) for i in range(args.test_episodes)]
+        test_time = time.perf_counter() - tic
         comparison += [dict(policy=algorithm, episode=i, **r) for i, r in enumerate(rows)]
-        summary[algorithm] = dict(kind="rl", checkpoint=best["episode"], states=len(agent.q), **summarize(rows))
+        summary[algorithm] = dict(kind="rl", checkpoint=best["episode"], states=len(agent.q),
+                                  train_seconds=round(train_time, 1), train_validation_seconds=round(total_time, 1),
+                                  test_seconds=round(test_time, 1), **summarize(rows))
         agent.save(models / f"{algorithm}.npz")
         write_csv(models / f"{algorithm}_qtable.csv", agent.to_rows(ACTION_NAMES))
         write_csv(logs / f"training_{algorithm}.csv", history)
@@ -133,7 +170,8 @@ def main():
     write_csv(logs / "learning_curve.csv", curve)
     write_csv(logs / "comparison.csv", comparison)
     meta = dict(config=str(Path(args.config).resolve().relative_to(ROOT)), episodes=args.episodes, validation_episodes=args.validation_episodes,
-                test_episodes=args.test_episodes, epsilon=[eps0, eps_min], **hp, ambiente=config.get("ambiente", {}))
+                test_episodes=args.test_episodes, epsilon=[eps0, eps_min], **hp, ambiente=config.get("ambiente", {}),
+                total_seconds=round(time.perf_counter() - run_start, 1), system=system_info())
     (logs / "summary.json").write_text(json.dumps(dict(meta=meta, results=summary), indent=2), encoding="utf-8")
     lines = [f"# Resultados en el cuarto 8x8 ({args.test_episodes} episodios de prueba)", "",
              "± es el intervalo de confianza del 95 %.", "",

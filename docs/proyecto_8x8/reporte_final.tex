@@ -24,6 +24,7 @@
 \usepackage{caption}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{pdfpages}
 \usepackage[colorlinks=true,linkcolor=azul,urlcolor=azul]{hyperref}
 
 \definecolor{azul}{HTML}{1F4E79}
@@ -89,8 +90,24 @@ desde un archivo, y el video muestra al agente usando esa Q-tabla.
 % =====================================================================
 \section{Definición del problema}
 
-La definición completa (estados, acciones, recompensas y triplas $(s,a,s')$ verificadas) está en el documento
-\emph{Definición de estados, acciones y función de recompensa}. Aquí se resume.
+\subsection{Cambios desde la Entrega 1}
+
+En la Entrega 1 definimos por error otro problema (la consolidación de pedidos en una bodega), no el del
+enunciado. Para esta entrega rehicimos la definición completa sobre el ambiente del curso, el cuarto de
+$8\times8$ con cinco obstáculos móviles, siguiendo las aclaraciones del foro y de los monitores. Cambiaron los
+tres componentes:
+\begin{itemize}
+  \item \textbf{Estados:} posición y orientación del agente, posiciones de los cinco obstáculos, inicio en
+    $(0,0)$, meta en $(7,7)$ y los terminales de llegada ($\META$) y de colisión ($\COL$).
+  \item \textbf{Acciones:} girar $90^\circ$ a la izquierda, girar $90^\circ$ a la derecha y avanzar a la casilla
+    de enfrente si existe, con el conjunto de acciones disponibles $A(s)$ en cada casilla del tablero.
+  \item \textbf{Recompensas:} $+100$ al llegar a $(7,7)$, $-100$ al chocar con un obstáculo y $-1$ por cada paso
+    y cada giro.
+\end{itemize}
+La definición completa, con la definición formal de los terminales y diez triplas $(s,a,s')$ verificadas con
+pruebas automáticas, está en el \hyperref[anexo]{Anexo A}. El cuadro~\ref{tab:mdp} la resume.
+
+\subsection{Resumen del MDP}
 
 \begin{table}[H]
 \centering\small
@@ -106,6 +123,7 @@ Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y 
 \bottomrule
 \end{tabularx}
 \caption{Resumen del MDP.}
+\label{tab:mdp}
 \end{table}
 
 % =====================================================================
@@ -158,12 +176,6 @@ Evaluación final & \TurnosPrueba{} episodios de prueba, los mismos para agentes
 \caption{Hiperparámetros y protocolo.}
 \end{table}
 
-\textbf{Una lección del entrenamiento.} La primera versión usaba $\gamma=0{,}95$, y el agente aprendió a
-\emph{no salir nunca} de $(0,0)$. Como los obstáculos no entran en la salida y no hay límite de pasos, girar
-para siempre ahí no tiene riesgo y ``vale'' $-1/(1-0{,}95)=-20$, más que el valor esperado de intentar el
-recorrido con una probabilidad de chocar cercana al 65\,\%. Con $\gamma=0{,}99$, girar sin fin vale $-100$, lo
-mismo que chocar, y el agente prefiere intentarlo.
-
 % =====================================================================
 \section{Resultados}
 
@@ -211,6 +223,7 @@ los \IgualBorde{} episodios de prueba, porque toma exactamente esa ruta, y super
 meta.
 
 \subsection{Qué aprendió el agente: la ruta}
+\label{sec:ruta}
 
 Como el agente no ve los obstáculos, su política depende solo de dónde está y hacia dónde mira, así que es una
 ruta fija. La figura~\ref{fig:ruta} la muestra.
@@ -241,6 +254,7 @@ queda un obstáculo, el \CausaCruce\,\% al cruzarse con uno y el \CausaGirando\,
 columna 7.
 
 \subsection{La Q-tabla}
+\label{sec:qtabla}
 
 La Q-tabla de Q-learning tiene \QLEstados{} de los 252 estados no terminales: el agente los visitó todos
 mientras exploraba. Se entrega completa en \code{results/cuarto\_8x8/models/q\_learning\_qtable.csv}. El
@@ -266,6 +280,48 @@ cerca de $-42$ en la salida a $+100$ junto a la meta. En la salida son negativos
 llegar en cerca de dos de cada tres episodios. El valor de $(0,0)$ es cercano a la recompensa media por
 episodio del cuadro~\ref{tab:resultados}.
 
+% =====================================================================
+\section{Comportamiento del agente}
+
+\subsection{Comportamiento esperado}
+
+Como el agente es ciego, no puede esquivar los obstáculos: solo puede aprender \emph{por dónde} ir. Esperábamos
+que aprendiera a salir de $(0,0)$ y a llegar a $(7,7)$ por un camino corto y con pocos giros, porque cada paso y
+cada giro son una oportunidad más de que un obstáculo lo alcance, y que nunca intentara avanzar contra una pared.
+También esperábamos que chocara en una parte importante de los episodios, porque los choques dependen de dónde se
+muevan los obstáculos, que el agente no ve. Lo observado coincide con lo esperado:
+\begin{itemize}
+  \item El agente entrenado sale siempre de la salida y toma una ruta fija de 16 pasos con \GirosQL{} giros por
+    el borde del cuarto (sección~\ref{sec:ruta}). Ningún episodio de prueba quedó sin terminar.
+  \item Llega a la meta en el \QLExito\,\% de los episodios de prueba y choca en el \QLChoque\,\%. Es lo
+    mismo que logra la mejor regla diseñada a mano, y más del doble que la ruta en escalera.
+  \item Los valores de la Q-tabla crecen a lo largo de la ruta y la acción elegida en cada casilla es la que
+    lleva a la siguiente casilla de la ruta (sección~\ref{sec:qtabla}).
+  \item También se observó el caso de choque mientras gira, que permiten las reglas: es el \CausaGirando\,\%
+    de los choques.
+\end{itemize}
+
+\subsection{Comportamiento no esperado observado}
+
+\begin{itemize}
+  \item \textbf{El agente no salía de la salida.} La primera versión usaba $\gamma=0{,}95$, y el agente
+    aprendió a quedarse girando para siempre en $(0,0)$. Como los obstáculos no entran en la salida y no hay
+    límite de pasos, girar ahí no tiene riesgo y ``vale'' $-1/(1-0{,}95)=-20$, más que el valor esperado de
+    intentar el recorrido con una probabilidad de chocar cercana al 65\,\%. Era un comportamiento correcto
+    para esas recompensas, pero no el que buscábamos. Con $\gamma=\GammaF$, girar sin fin vale $-100$, lo mismo
+    que chocar, y el agente prefiere intentarlo.
+  \item \textbf{La política cambiaba de un control a otro.} Con una tasa de aprendizaje fija, los valores
+    oscilaban por el ruido de los choques y en algunos puntos de control la política greedy quedaba girando en
+    un mismo sitio (0\,\% de llegadas en la figura~\ref{fig:curvas}). Lo corregimos con la tasa que disminuye
+    con las visitas, y por eso entregamos la Q-tabla del mejor punto de control en validación.
+  \item \textbf{SARSA aprendió otra ruta.} En lugar de ir por la fila 0, SARSA baja primero por la columna 0
+    y luego va por la fila 7, con un giro más. Las dos rutas tienen un riesgo casi igual y SARSA llega en una
+    proporción similar (\SARSAExito\,\%); la diferencia con Q-learning está dentro del intervalo de confianza.
+  \item \textbf{Pocas llegadas en el video.} En los \VideoEpisodios{} episodios del video el agente llega solo
+    \VideoMeta{} veces (\VideoExito\,\%). No es un cambio de comportamiento sino el azar de una muestra pequeña
+    (sección~\ref{sec:entregables}).
+\end{itemize}
+
 \subsection{Limitaciones}
 
 \begin{itemize}
@@ -276,7 +332,42 @@ episodio del cuadro~\ref{tab:resultados}.
 \end{itemize}
 
 % =====================================================================
+\section{Tiempo de ejecución y condiciones de hardware y software}
+
+El entrenamiento y la evaluación se corrieron con \code{experiments/cuarto\_8x8/train.py}, que registra los
+tiempos y el equipo en \code{results/cuarto\_8x8/logs/summary.json}. El código es Python de un solo hilo: usa
+un núcleo del procesador y no usa GPU.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}P{5.6cm}L@{}}
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+Procesador & \CPU{} (\Nucleos{} núcleos virtuales) \\
+Memoria RAM & \RAM{} GB \\
+GPU & No se usa \\
+Sistema operativo & \SO{} (máquina virtual en la nube) \\
+Software & Python \VerPy{}, NumPy \VerNumpy{}, Gymnasium \VerGym{}, Matplotlib \VerMpl{}, PyYAML \VerYaml{} \\
+\midrule
+Entrenamiento de Q-learning (\Episodios{} episodios) & \TQLEnt{} (\TQLMsEp{} ms por episodio); \TQLEntVal{} con las validaciones periódicas \\
+Entrenamiento de SARSA (\Episodios{} episodios) & \TSARSAEnt{} (\TSARSAMsEp{} ms por episodio); \TSARSAEntVal{} con las validaciones periódicas \\
+Prueba (\TurnosPrueba{} episodios por agente) & \TQLPrueba{} (Q-learning), \TSARSAPrueba{} (SARSA) \\
+Corrida completa de \code{train.py} & \TTotal{} (dos agentes, cinco políticas evaluadas, figuras) \\
+Generación del video (\VideoEpisodios{} episodios) & \TVideo{} \\
+\bottomrule
+\end{tabularx}
+\caption{Equipo, software y tiempos de ejecución.}
+\label{tab:tiempos}
+\end{table}
+
+El entrenamiento es rápido porque la Q-tabla es pequeña: \QLEstados{} estados por 3 acciones. Casi todo el
+tiempo se va en simular el movimiento de los obstáculos. La corrida es determinista: con las mismas semillas,
+volver a entrenar reproduce exactamente la misma Q-tabla y los mismos resultados.
+
+% =====================================================================
 \section{Entregables y reproducción}
+\label{sec:entregables}
 
 \begin{table}[H]
 \centering\small
@@ -305,7 +396,7 @@ semillas para mostrar más llegadas: el video es una muestra al azar del comport
 \begin{verbatim}
 conda env create -f environment.yml && conda activate rl-warehouse-agent
 python -m pytest tests/test_gridworld.py          # 18 pruebas
-python experiments/cuarto_8x8/train.py            # entrena y evalúa (unos minutos)
+python experiments/cuarto_8x8/train.py            # entrena y evalúa
 python experiments/cuarto_8x8/demo.py             # carga la Q-tabla y graba el video
 python experiments/cuarto_8x8/demo.py --human     # lo muestra en una ventana
 \end{verbatim}
@@ -316,5 +407,12 @@ Todos los resultados son reproducibles con las semillas fijas del código.
 \section*{Referencias}
 
 Sutton, R. S. y Barto, A. G. (2018). \emph{Reinforcement Learning: An Introduction} (2.ª ed.). MIT Press.
+
+% =====================================================================
+\clearpage
+\phantomsection\label{anexo}
+\addcontentsline{toc}{section}{Anexo A}
+\includepdf[pages=-,pagecommand={\thispagestyle{empty}},
+  picturecommand*={\put(0,775){\makebox[\paperwidth]{\colorbox{azul}{\color{white}\bfseries\small\ Anexo A. Definición de estados, acciones y función de recompensa\ }}}}]{definicion_ambiente.pdf}
 
 \end{document}

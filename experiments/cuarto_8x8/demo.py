@@ -7,6 +7,7 @@
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +36,7 @@ def main():
     agent = TabularAgent.load(args.model)                 # la memoria del agente: la Q-tabla guardada
     name = {"q_learning": "Q-learning", "sarsa": "SARSA"}[agent.algorithm]
     frames, results = [], []
+    start = time.perf_counter()
     for k in range(args.episodes):
         obs, info = env.reset(seed=args.seed + k)
         title = f"Agente {name} · episodio {k + 1} de {args.episodes}"
@@ -55,7 +57,8 @@ def main():
     # Resumen del video para el reporte (lo lee report_numbers.py)
     summary = dict(model=args.model.name, algorithm=agent.algorithm, episodes=len(results),
                    seeds=[args.seed, args.seed + args.episodes - 1], successes=results.count("meta"),
-                   collisions=results.count("colision"), seconds=len(frames) / args.fps, outcomes=results)
+                   collisions=results.count("colision"), seconds=len(frames) / args.fps,
+                   generation_seconds=round(time.perf_counter() - start, 1), outcomes=results)
     log = ROOT / "results/cuarto_8x8/logs/demo.json"
     log.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 

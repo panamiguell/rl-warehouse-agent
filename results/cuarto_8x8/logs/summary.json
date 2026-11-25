@@ -18,7 +18,6 @@
     "ambiente": {
       "tamano": 8,
       "obstaculos": 5,
-      "percepcion": false,
       "salvaguarda_pasos": 1000,
       "recompensas": {
         "meta": 100,
@@ -27,6 +26,19 @@
         "giro": -1,
         "accion_invalida": -10
       }
+    },
+    "total_seconds": 122.1,
+    "system": {
+      "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+      "cores": 2,
+      "ram_gb": 7.8,
+      "gpu": "no se usa",
+      "os": "Ubuntu 24.04.5 LTS",
+      "python": "3.13.18",
+      "numpy": "2.5.3",
+      "gymnasium": "1.4.0",
+      "matplotlib": "3.11.2",
+      "pyyaml": "6.0.3"
     }
   },
   "results": {
@@ -34,6 +46,9 @@
       "kind": "rl",
       "checkpoint": 30000,
       "states": 252,
+      "train_seconds": 54.1,
+      "train_validation_seconds": 58.8,
+      "test_seconds": 1.1,
       "success": 0.351,
       "success_ci95": 0.020917846906409843,
       "collision": 0.649,
@@ -50,6 +65,9 @@
       "kind": "rl",
       "checkpoint": 15000,
       "states": 252,
+      "train_seconds": 50.0,
+      "train_validation_seconds": 55.1,
+      "test_seconds": 1.3,
       "success": 0.344,
       "success_ci95": 0.0208195920036873,
       "collision": 0.656,

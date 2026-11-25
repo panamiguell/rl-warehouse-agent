@@ -24,6 +24,8 @@ python experiments/cuarto_8x8/demo.py                   # carga la Q-tabla y gra
 python experiments/cuarto_8x8/demo.py --human           # lo muestra en una ventana
 ```
 
+La corrida completa de `train.py` tarda unos 2 minutos en un procesador de 2 núcleos sin GPU (cada agente se entrena en menos de un minuto) y es determinista: vuelve a dar la misma Q-tabla y los mismos resultados. El detalle de tiempos, equipo y software está en `results/cuarto_8x8/logs/summary.json` y en la sección 5 del reporte.
+
 La Q-tabla se guarda con `TabularAgent.save(ruta)` y se carga con `TabularAgent.load(ruta)` (`src/rl_gridworld/agent.py`).
 
 **Resultados** (2 000 episodios de prueba; ± es el intervalo de confianza del 95 %):
