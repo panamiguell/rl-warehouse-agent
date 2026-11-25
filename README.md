@@ -1,4 +1,4 @@
-# rl-warehouse-agent
+# Agente de RL en un cuarto 8x8 con obstáculos móviles
 
 Repositorio del proyecto del curso **Aprendizaje por Refuerzo** (Maestría en Inteligencia Artificial, Universidad de los Andes).
 
@@ -17,7 +17,7 @@ Un agente (triángulo) parte de la casilla (0,0) mirando al norte y debe llegar 
 
 ```powershell
 conda env create -f environment.yml
-conda activate rl-warehouse-agent
+conda activate rl-cuarto-8x8
 python -m pytest tests/test_gridworld.py                # 18 pruebas, incluidas las triplas (s, a, s') del documento
 python experiments/cuarto_8x8/train.py                  # entrena Q-learning y SARSA y los compara con reglas fijas
 python experiments/cuarto_8x8/demo.py                   # carga la Q-tabla y graba el video

@@ -1,4 +1,4 @@
-name: rl-warehouse-agent
+name: rl-cuarto-8x8
 channels:
   - conda-forge
 dependencies:
