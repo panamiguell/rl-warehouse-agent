@@ -178,6 +178,78 @@ def main():
             table.append("\\midrule")
     (OUT / "tabla_resultados.tex").write_text("\n".join(table) + "\n", encoding="utf-8")
 
+    # Búsqueda de hiperparámetros (grid_search.py)
+    grid_dir = OFFICIAL / "grid"
+    read = lambda name: list(csv.DictReader((grid_dir / name).open(encoding="utf-8")))
+    stage1, stage2, confirm = read("etapa1_gamma.csv"), read("etapa2_grid.csv"), read("confirmacion.csv")
+    selection = json.loads((grid_dir / "seleccion.json").read_text(encoding="utf-8"))
+
+    def route_name(route):
+        if route.endswith("..."):
+            return "gira sin salir" if set(route[:-3]) <= {"I", "D"} else "da vueltas"
+        r, c, h = 0, 0, 0
+        cells = []
+        for a in route:
+            if a == "I":
+                h = (h - 1) % 4
+            elif a == "D":
+                h = (h + 1) % 4
+            else:
+                r, c = r + [-1, 0, 1, 0][h], c + [0, 1, 0, -1][h]
+                cells.append((r, c))
+        turns = sum(a != "A" for a in route)
+        side = "fila 0 y columna 7" if (0, 7) in cells else "columna 0 y fila 7" if (7, 0) in cells else "otra"
+        return f"borde por {side} ({len(route)} pasos, {turns} giros)"
+
+    def alpha_name(a):
+        return "fija 0{,}1" if a == "fija" else f"$N^{{-{num(float(a), 1)}}}$"
+
+    algo = {"q_learning": "Q-learning", "sarsa": "SARSA"}
+    table = []
+    for r in stage1:
+        table.append(f"{algo[r['algorithm']]} & {num(float(r['gamma']), 2)} & {num(100 * float(r['validation']), 1)} & "
+                     f"{route_name(r['route'])} & {num(float(r['train_steps_per_episode']), 0)} \\\\")
+    (OUT / "tabla_gamma.tex").write_text("\n".join(table) + "\n", encoding="utf-8")
+    groups = {}
+    for r in confirm:
+        groups.setdefault((r["algorithm"], r["gamma"], r["alpha"], r["eps_min"]), []).append(r)
+    table = []
+    for entry in selection["ranking"]:
+        k = (entry["algorithm"], str(entry["gamma"]), str(entry["alpha"]), str(entry["eps_min"]))
+        rows = sorted(groups[k], key=lambda r: int(r["seed"]))
+        seeds = " & ".join(num(100 * float(r["validation"]), 1) for r in rows)
+        routes = "; ".join(sorted({route_name(r["route"]).split(" (")[0].replace("borde por ", "") for r in rows}))
+        name = f"{algo[k[0]]} & {num(float(k[1]), 3 if float(k[1]) > 0.99 else 2)} & {alpha_name(k[2])} & {num(float(k[3]), 2)}"
+        table.append(f"{name} & {seeds} & \\textbf{{{num(100 * entry['validation_mean'], 1)}}} & {routes} \\\\")
+    (OUT / "tabla_confirmacion.tex").write_text("\n".join(table) + "\n", encoding="utf-8")
+
+    val2 = [float(r["validation"]) for r in stage2]
+    border = [r for r in stage2 if route_name(r["route"]).startswith("borde")]
+    macro("GridTotal", str(selection["combinations"]))
+    macro("GridEtapaDos", str(len(stage2)))
+    macro("GridConfirmacion", str(selection["confirmation_runs"]))
+    macro("GridMinutos", str(round(selection["minutes"])))
+    macro("GridMin", num(100 * min(val2), 1))
+    macro("GridMax", num(100 * max(val2), 1))
+    macro("GridBorde", str(len(border)))
+    macro("GridFilaCero", str(sum("fila 0 y" in route_name(r["route"]) for r in stage2)))
+    macro("GridColumnaCero", str(sum("columna 0 y" in route_name(r["route"]) for r in stage2)))
+    for name, rows in (("Fija", [r for r in stage2 if r["alpha"] == "fija"]),
+                       ("Visitas", [r for r in stage2 if r["alpha"] != "fija"])):
+        macro(f"GridCeros{name}", num(np.mean([int(r["zero_checkpoints"]) for r in rows]), 1))
+        macro(f"GridVal{name}", num(100 * np.mean([float(r["validation"]) for r in rows]), 1))
+    for key in ("q_learning", "sarsa"):
+        macro(f"GridVal{SHORT[key]}", num(100 * np.mean([float(r["validation"]) for r in stage2 if r["algorithm"] == key]), 1))
+    for e, name in (("0.01", "Uno"), ("0.05", "Cinco"), ("0.1", "Diez")):
+        macro(f"GridValEps{name}", num(100 * np.mean([float(r["validation"]) for r in stage2 if r["eps_min"] == e]), 1))
+    for g, name in (("0.99", "NN"), ("0.999", "NNN")):
+        macro(f"GridValGamma{name}", num(100 * np.mean([float(r["validation"]) for r in stage2 if r["gamma"] == g]), 1))
+    macro("SelAlg", algo[selection["algorithm"]])
+    macro("SelGamma", num(float(selection["gamma"]), 3 if float(selection["gamma"]) > 0.99 else 2))
+    macro("SelAlpha", alpha_name(str(selection["alpha"]) if selection["alpha"] == "fija" else selection["alpha"]))
+    macro("SelEps", num(float(selection["eps_min"]), 2))
+    macro("SelVal", num(100 * selection["validation_mean"], 1))
+
     # Ruta aprendida y causas de colisión
     config = yaml.safe_load((ROOT / "configs/cuarto_8x8.yaml").read_text(encoding="utf-8"))
     ql = TabularAgent.load(OFFICIAL / "models/q_learning.npz")
