@@ -17,9 +17,10 @@ ambiente:
 
 entrenamiento:
   episodios: 50000
-  gamma: 0.99               # sin límite de pasos, girar sin fin en la salida vale -1/(1-γ) = -100
-  alpha_potencia: 0.7       # tasa por visitas: α(s,a) = max(alpha_minima, N(s,a)^-0.7)
+  # Valores elegidos con experiments/cuarto_8x8/grid_search.py (results/cuarto_8x8/grid/seleccion.json)
+  gamma: 0.999              # sin límite de pasos, girar sin fin en la salida vale -1/(1-γ) = -1000
+  alpha_potencia: 0.9       # tasa por visitas: α(s,a) = max(alpha_minima, N(s,a)^-0.9)
   alpha_minima: 0.01
   epsilon_inicial: 1.0
-  epsilon_minimo: 0.05      # se alcanza al 80 % del entrenamiento (decaimiento geométrico)
+  epsilon_minimo: 0.01      # se alcanza al 80 % del entrenamiento (decaimiento geométrico)
   semilla: 0

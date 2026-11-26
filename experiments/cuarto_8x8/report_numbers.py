@@ -107,7 +107,7 @@ def main():
     macro("Episodios", f"{meta['episodes']:,}".replace(",", "\\,"))
     macro("TurnosPrueba", f"{meta['test_episodes']:,}".replace(",", "\\,"))
     macro("TurnosValidacion", str(meta["validation_episodes"]))
-    macro("GammaF", num(hp["gamma"], 2))
+    macro("GammaF", num(hp["gamma"], 3 if hp["gamma"] > 0.99 else 2))
     macro("AlphaPot", num(hp["alpha_potencia"], 1))
     macro("AlphaMin", num(hp["alpha_minima"], 2))
     macro("EpsIni", num(meta["epsilon"][0], 1))
@@ -161,7 +161,7 @@ def main():
     col = lambda p, k: np.array([float(r[k]) for r in rows if r["policy"] == p])
     same = int(np.sum(col("q_learning", "success") == col("borde", "success")))
     macro("IgualBorde", f"{same:,}".replace(",", "\\,"))
-    for key in ("escalera", "aleatoria"):
+    for key in ("borde", "escalera", "aleatoria"):
         d = col("q_learning", "success") - col(key, "success")
         macro(f"DifQL{SHORT[key]}", num(100 * d.mean(), 1))
         macro(f"DifQL{SHORT[key]}ci", num(100 * 1.96 * d.std(ddof=1) / np.sqrt(len(d)), 1))
@@ -238,6 +238,14 @@ def main():
                        ("Visitas", [r for r in stage2 if r["alpha"] != "fija"])):
         macro(f"GridCeros{name}", num(np.mean([int(r["zero_checkpoints"]) for r in rows]), 1))
         macro(f"GridVal{name}", num(100 * np.mean([float(r["validation"]) for r in rows]), 1))
+        macro(f"GridEstab{name}", num(100 * np.mean([float(r["stability"]) for r in rows]), 1))
+        macro(f"GridEpisodio{name}", f"{round(np.mean([int(r['best_episode']) for r in rows]), -3):,.0f}".replace(",", "\\,"))
+    macro("GridCerosSiete", num(np.mean([int(r["zero_checkpoints"]) for r in stage2 if r["alpha"] == "0.7"]), 1))
+    macro("GridValFilaCero", num(100 * np.mean([float(r["validation"]) for r in stage2 if "fila 0 y" in route_name(r["route"])]), 1))
+    macro("GridValColumnaCero", num(100 * np.mean([float(r["validation"]) for r in stage2 if "columna 0 y" in route_name(r["route"])]), 1))
+    for r in stage1:
+        if r["algorithm"] == "q_learning":
+            macro(f"GammaPasos{ {'0.9': 'A', '0.95': 'B', '0.99': 'C'}[r['gamma']] }", num(float(r["train_steps_per_episode"]), 0))
     for key in ("q_learning", "sarsa"):
         macro(f"GridVal{SHORT[key]}", num(100 * np.mean([float(r["validation"]) for r in stage2 if r["algorithm"] == key]), 1))
     for e, name in (("0.01", "Uno"), ("0.05", "Cinco"), ("0.1", "Diez")):
@@ -248,6 +256,7 @@ def main():
     macro("SelGamma", num(float(selection["gamma"]), 3 if float(selection["gamma"]) > 0.99 else 2))
     macro("SelAlpha", alpha_name(str(selection["alpha"]) if selection["alpha"] == "fija" else selection["alpha"]))
     macro("SelEps", num(float(selection["eps_min"]), 2))
+    macro("SelOmega", "--" if selection["alpha"] == "fija" else num(float(selection["alpha"]), 1))
     macro("SelVal", num(100 * selection["validation_mean"], 1))
 
     # Ruta aprendida y causas de colisión
@@ -265,6 +274,13 @@ def main():
                  (sa_cells, "#eb6834", "--", 2.2, f"SARSA ({len(sa_actions)} pasos)", 0.08),
                  (ql_cells, "#2a78d6", "-", 2.6, f"Q-learning ({len(ql_actions)} pasos)", -0.08)],
                 FIGS / "ruta_aprendida.png")
+    corner = (0, 7) if (0, 7) in ql_cells else (7, 0)
+    first, second = ("fila 0", "columna 7") if corner == (0, 7) else ("columna 0", "fila 7")
+    macro("TramoUno", first)
+    macro("TramoDos", second)
+    macro("Esquina", f"$({corner[0]},{corner[1]})$")
+    macro("PasosQL", str(len(ql_actions)))
+    macro("PasosSARSA", str(len(sa_actions)))
     env = ObstacleGridEnv(config.get("ambiente", {}))
     causes, where = Counter(), Counter()
     for i in range(meta["test_episodes"]):
@@ -275,17 +291,31 @@ def main():
             obs, _, terminated, truncated, info = env.step(action)
             if env.outcome == "colision":
                 causes["cruce" if info["swap"] else "avanzando" if action == AVANZAR else "girando"] += 1
-                where["esquina" if cell == (0, 7) else "fila 0" if cell[0] == 0 else "columna 7"] += 1
+                on_first = cell[0] == 0 if corner == (0, 7) else cell[1] == 0
+                where["esquina" if cell == corner else "primero" if on_first else "segundo"] += 1
             if terminated or truncated:
                 break
     total = sum(causes.values())
     for cause in ("avanzando", "cruce", "girando"):
         macro(f"Causa{cause.capitalize()}", num(100 * causes[cause] / total, 0))
-    for place, name in (("fila 0", "Fila"), ("esquina", "Esquina"), ("columna 7", "Columna")):
+    for place, name in (("primero", "Uno"), ("esquina", "Esquina"), ("segundo", "Dos")):
         macro(f"Lugar{name}", num(100 * where[place] / total, 0))
 
     # Extracto de la Q-tabla
-    picks = [(0, 0, 0), (0, 0, 1), (0, 0, 3), (0, 3, 1), (0, 7, 1), (0, 7, 2), (3, 7, 2), (6, 7, 2), (3, 3, 1)]
+    path_states, (r, c, h) = [], (0, 0, 0)
+    for a in ql_actions:
+        path_states.append((r, c, h))
+        if a == AVANZAR:
+            r, c = r + [-1, 0, 1, 0][h], c + [0, 1, 0, -1][h]
+        else:
+            h = (h + (1 if a == 1 else -1)) % 4
+    turning = [i for i, a in enumerate(ql_actions) if a != AVANZAR]
+    corner_turn = max(turning)
+    picks = [path_states[i] for i in sorted(set(turning[:-1]) | {0, 3, corner_turn, corner_turn + 4,
+                                                                   len(path_states) - 1})]
+    picks.append((3, 3, 1))
+    macro("QSalida", num(float(np.max(ql.q[(0, 0, 0)][:2])), 1))           # en (0,0) al norte solo se puede girar
+    macro("QUltimo", num(float(np.max(ql.q[path_states[-1]])), 1))
     table = []
     for key in picks:
         if key not in ql.q:

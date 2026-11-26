@@ -294,11 +294,12 @@ $s\in\{\META,\COL\}$ & -- & Estado terminal: no hay acciones ni recompensas \\
 \caption{Recompensas para todas las situaciones posibles.}
 \end{table}
 
-\textbf{Descuento.} Se usa $\gamma=0{,}99$. Como no hay límite de pasos y los obstáculos no entran en la
-salida, el agente podría quedarse girando en $(0,0)$ para siempre sin chocar. Eso vale
-$-1/(1-\gamma)=-100$, lo mismo que chocar, así que intentar llegar a la meta es preferible. Con un $\gamma$
-menor, por ejemplo $0{,}95$, quedarse girando valdría solo $-20$, más que el valor esperado de intentar el
-recorrido, y el agente aprendería a no salir nunca. Lo comprobamos al entrenar.
+\textbf{Descuento.} Como no hay límite de pasos y los obstáculos no entran en la salida, el agente podría
+quedarse girando en $(0,0)$ para siempre sin chocar. Eso vale $-1/(1-\gamma)$: $-10$ con $\gamma=0{,}90$ y $-20$
+con $0{,}95$, más que el valor esperado de intentar el recorrido, así que con esos valores el agente aprende a no
+salir nunca. Con $\gamma=0{,}99$ vale $-100$, lo mismo que chocar, y con $0{,}999$ vale $-1\,000$: intentar
+llegar a la meta es preferible. La búsqueda de hiperparámetros del reporte final lo confirma (con $0{,}90$ y
+$0{,}95$ el agente se queda en la salida) y elige $\gamma=0{,}999$.
 
 \textbf{Comportamiento esperado.} Con estas recompensas, la política óptima llega a $(7,7)$ por el camino con
 menos riesgo esperado de colisión: corto y con pocos giros, porque cada paso y cada giro lo exponen a que un

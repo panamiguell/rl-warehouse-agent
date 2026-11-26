@@ -6,14 +6,14 @@
     "test_episodes": 2000,
     "epsilon": [
       1.0,
-      0.05
+      0.01
     ],
     "episodios": 50000,
-    "gamma": 0.99,
-    "alpha_potencia": 0.7,
+    "gamma": 0.999,
+    "alpha_potencia": 0.9,
     "alpha_minima": 0.01,
     "epsilon_inicial": 1.0,
-    "epsilon_minimo": 0.05,
+    "epsilon_minimo": 0.01,
     "semilla": 0,
     "ambiente": {
       "tamano": 8,
@@ -27,9 +27,9 @@
         "accion_invalida": -10
       }
     },
-    "total_seconds": 122.1,
+    "total_seconds": 68.1,
     "system": {
-      "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+      "cpu": "Intel(R) Xeon(R) Processor @ 2.30GHz",
       "cores": 2,
       "ram_gb": 7.8,
       "gpu": "no se usa",
@@ -44,30 +44,11 @@
   "results": {
     "q_learning": {
       "kind": "rl",
-      "checkpoint": 30000,
+      "checkpoint": 10000,
       "states": 252,
-      "train_seconds": 54.1,
-      "train_validation_seconds": 58.8,
-      "test_seconds": 1.1,
-      "success": 0.351,
-      "success_ci95": 0.020917846906409843,
-      "collision": 0.649,
-      "collision_ci95": 0.020917846906409843,
-      "truncated": 0.0,
-      "truncated_ci95": 0.0,
-      "reward": -39.255,
-      "reward_ci95": 4.008297568379665,
-      "steps_success": 16.0,
-      "steps": 10.455,
-      "episodes": 2000
-    },
-    "sarsa": {
-      "kind": "rl",
-      "checkpoint": 15000,
-      "states": 252,
-      "train_seconds": 50.0,
-      "train_validation_seconds": 55.1,
-      "test_seconds": 1.3,
+      "train_seconds": 29.8,
+      "train_validation_seconds": 32.6,
+      "test_seconds": 0.7,
       "success": 0.344,
       "success_ci95": 0.0208195920036873,
       "collision": 0.656,
@@ -78,6 +59,25 @@
       "reward_ci95": 3.9886265613200282,
       "steps_success": 17.0,
       "steps": 11.363,
+      "episodes": 2000
+    },
+    "sarsa": {
+      "kind": "rl",
+      "checkpoint": 15000,
+      "states": 252,
+      "train_seconds": 27.6,
+      "train_validation_seconds": 30.5,
+      "test_seconds": 0.7,
+      "success": 0.351,
+      "success_ci95": 0.020917846906409843,
+      "collision": 0.649,
+      "collision_ci95": 0.020917846906409843,
+      "truncated": 0.0,
+      "truncated_ci95": 0.0,
+      "reward": -39.255,
+      "reward_ci95": 4.008297568379665,
+      "steps_success": 16.0,
+      "steps": 10.455,
       "episodes": 2000
     },
     "aleatoria": {
