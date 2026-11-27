@@ -206,8 +206,10 @@ def plot(rows):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
 
     ink = "#1F2933"
+    maia = LinearSegmentedColormap.from_list("maia", ["#FFFFFF", "#5BB1A5", "#5A6ACE", "#2E3A8C"])
     comma = lambda x: str(x).replace(".", ",")
     labels = [f"α {'fija 0,1' if a == 'fija' else 'N^-' + comma(a)}  ·  ε mín {comma(e)}" for a in ALPHAS for e in EPS_MINS]
     fig, axes = plt.subplots(1, 2, figsize=(9, 5.6), dpi=150, sharey=True)
@@ -219,7 +221,7 @@ def plot(rows):
             a = r["alpha"] if r["alpha"] == "fija" else float(r["alpha"])
             i = ALPHAS.index(a) * len(EPS_MINS) + EPS_MINS.index(float(r["eps_min"]))
             grid[i, GAMMAS.index(float(r["gamma"]))] = 100 * float(r["validation"])
-        ax.imshow(grid, cmap="Blues", vmin=0, vmax=45, aspect="auto")
+        ax.imshow(grid, cmap=maia, vmin=0, vmax=45, aspect="auto")
         for (i, j), v in np.ndenumerate(grid):
             ax.text(j, i, f"{v:.1f}".replace(".", ","), ha="center", va="center", fontsize=8.5,
                     color="white" if v > 28 else ink)

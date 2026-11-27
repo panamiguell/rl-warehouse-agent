@@ -25,12 +25,9 @@
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{pdfpages}
-\usepackage[colorlinks=true,linkcolor=azul,urlcolor=azul]{hyperref}
+\usepackage[colorlinks=true]{hyperref}
+\usepackage{estilo_maia}
 
-\definecolor{azul}{HTML}{1F4E79}
-\titleformat{\section}{\Large\bfseries\color{azul}}{\thesection.}{0.6em}{}
-\titleformat{\subsection}{\large\bfseries\color{azul}}{\thesubsection}{0.6em}{}
-\captionsetup{font=small,labelfont=bf}
 \setlist{itemsep=2pt,topsep=4pt}
 \newcolumntype{L}{>{\raggedright\arraybackslash}X}
 \newcolumntype{R}{>{\raggedleft\arraybackslash}X}
@@ -39,11 +36,6 @@
 \setlength{\emergencystretch}{2em}
 \graphicspath{{figuras/}{../../results/cuarto_8x8/figures/}{../../results/cuarto_8x8/grid/figures/}}
 
-\pagestyle{fancy}
-\fancyhf{}
-\lhead{\small Aprendizaje por Refuerzo -- Proyecto, entrega final}
-\rhead{\small Cuarto 8x8 con obstáculos móviles}
-\cfoot{\small \thepage}
 
 \newcommand{\IZQ}{\mathsf{GIRAR\_IZQ}}
 \newcommand{\DER}{\mathsf{GIRAR\_DER}}
@@ -62,53 +54,43 @@
 
 \begin{document}
 
-\begin{center}
-  {\small Universidad de los Andes \textperiodcentered{} Maestría en Inteligencia Artificial}\\[2pt]
-  {\small Aprendizaje por Refuerzo \textperiodcentered{} Prof. Nicolás Cardozo}\\[10pt]
-  {\LARGE\bfseries\color{azul} Agente de RL en un cuarto 8x8\\[2pt] con obstáculos móviles}\\[8pt]
-  {\large Entrega final: implementación, entrenamiento y evaluación}\\[8pt]
-  Miguel Ángel Muñoz Layton \quad\textperiodcentered\quad Daniel F. Barrera Armendaris\\[2pt]
-  {\small Noviembre de 2026}
-\end{center}
-
-\vspace{4pt}
-\hrule
-\vspace{8pt}
+\portadamaia{Agente de aprendizaje por refuerzo en un cuarto de 8\,\texttimes\,8 con obstáculos móviles}{Entrega final: implementación, entrenamiento y evaluación}
 
 \section*{Resumen}
 
-Se implementó el ambiente del enunciado con las reglas que aclaró el curso: un cuarto de $8\times8$ donde el
-agente parte de $(0,0)$, debe llegar a $(7,7)$ y no puede chocar con cinco obstáculos que se mueven al azar al
-mismo tiempo que él. El agente no ve los obstáculos, así que su Q-tabla depende solo de su posición y su
-orientación. Se entrenaron agentes de Q-learning y SARSA durante \Episodios{} episodios, con hiperparámetros
-elegidos en una búsqueda en grid de \GridTotal{} combinaciones evaluadas solo en validación. Sin entrenar, el
-agente llega a la meta en el \RandExito\,\% de los episodios. Entrenado con Q-learning llega en el
-\textbf{\QLExito\,\%}, y lo hace por una ruta que nadie le indicó: va por el borde del cuarto, primero hacia
-abajo por la columna 0 y luego hacia la derecha por la fila 7. Es estadísticamente igual a la mejor regla que
-diseñamos a mano (la ruta espejo, por la fila 0 y la columna 7) y supera en \DifQLEsc{} $\pm$ \DifQLEscci{} puntos
-a la ruta en escalera por el centro. La búsqueda de hiperparámetros muestra que con $\gamma\le0{,}95$ el agente se
-queda girando en la salida y que con $\gamma\ge0{,}99$ todas las combinaciones aprenden una ruta por el borde. La
-Q-tabla se guarda y se carga desde un archivo, y el video muestra al agente usando esa Q-tabla.
+Este informe presenta la implementación, el entrenamiento y la evaluación de un agente de aprendizaje por
+refuerzo tabular en el ambiente propuesto por el curso: un cuarto de $8\times8$ en el que el agente parte de la
+casilla $(0,0)$ y debe llegar a $(7,7)$ sin chocar con cinco obstáculos que se mueven de forma aleatoria y
+simultánea con él. De acuerdo con las aclaraciones del curso, el agente no percibe los obstáculos, por lo que su
+Q-tabla depende únicamente de su posición y orientación. Entrenamos agentes de Q-learning y SARSA durante
+\Episodios{} episodios con hiperparámetros seleccionados mediante una búsqueda en grid de \GridTotal{}
+combinaciones, evaluadas exclusivamente sobre episodios de validación. Un agente sin entrenar alcanza la meta en
+el \RandExito\,\% de los episodios de prueba, mientras que el agente entrenado con Q-learning la alcanza en el
+\textbf{\QLExito\,\%}. La política aprendida recorre el borde del cuarto, primero por la columna 0 y luego por la
+fila 7; su desempeño es estadísticamente equivalente al de la mejor regla diseñada manualmente y supera en
+\DifQLEsc{} $\pm$ \DifQLEscci{} puntos porcentuales a una ruta en escalera por el centro. La búsqueda de
+hiperparámetros muestra además que con $\gamma\le0{,}95$ el agente aprende a permanecer en la casilla de salida,
+y que con $\gamma\ge0{,}99$ todas las configuraciones evaluadas convergen a una ruta por el borde. La Q-tabla se
+almacena y se carga desde archivo, y el video entregado muestra la ejecución del agente con la tabla cargada.
 
 % =====================================================================
 \section{Definición del problema}
 
 \subsection{Cambios desde la Entrega 1}
 
-En la Entrega 1 definimos por error otro problema (la consolidación de pedidos en una bodega), no el del
-enunciado. Para esta entrega rehicimos la definición completa sobre el ambiente del curso, el cuarto de
-$8\times8$ con cinco obstáculos móviles, siguiendo las aclaraciones del foro y de los monitores. Cambiaron los
-tres componentes:
-\begin{itemize}
-  \item \textbf{Estados:} posición y orientación del agente, posiciones de los cinco obstáculos, inicio en
-    $(0,0)$, meta en $(7,7)$ y los terminales de llegada ($\META$) y de colisión ($\COL$).
-  \item \textbf{Acciones:} girar $90^\circ$ a la izquierda, girar $90^\circ$ a la derecha y avanzar a la casilla
-    de enfrente si existe, con el conjunto de acciones disponibles $A(s)$ en cada casilla del tablero.
-  \item \textbf{Recompensas:} $+100$ al llegar a $(7,7)$, $-100$ al chocar con un obstáculo y $-1$ por cada paso
-    y cada giro.
-\end{itemize}
-La definición completa, con la definición formal de los terminales y diez triplas $(s,a,s')$ verificadas con
-pruebas automáticas, está en el \hyperref[anexo]{Anexo A}. El cuadro~\ref{tab:mdp} la resume.
+En la Entrega 1 formulamos, por error, un problema distinto al del enunciado (la consolidación de pedidos en una
+bodega). Para esta entrega reformulamos por completo el proceso de decisión de Markov sobre el ambiente del curso,
+siguiendo las aclaraciones publicadas en el foro y las indicaciones de los monitores. Los tres componentes
+cambiaron. El estado incluye ahora la posición y la orientación del agente, las posiciones de los cinco
+obstáculos, la casilla de inicio $(0,0)$, la meta $(7,7)$ y los estados terminales de llegada ($\META$) y de
+colisión ($\COL$). Las acciones son girar $90^\circ$ a la izquierda, girar $90^\circ$ a la derecha y avanzar a la
+casilla de enfrente cuando esta existe, de modo que el conjunto de acciones disponibles $A(s)$ depende de la
+posición en el tablero. Las recompensas son $+100$ al llegar a $(7,7)$, $-100$ al chocar con un obstáculo y $-1$
+por cada paso o giro.
+
+La definición completa, que incluye la definición formal de los estados terminales y diez triplas $(s,a,s')$
+verificadas con pruebas automáticas, se encuentra en el \hyperref[anexo]{Anexo A}. El cuadro~\ref{tab:mdp}
+resume sus elementos.
 
 \subsection{Resumen del MDP}
 
@@ -116,13 +98,14 @@ pruebas automáticas, está en el \hyperref[anexo]{Anexo A}. El cuadro~\ref{tab:
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{2.4cm}L@{}}
 \toprule
+\encabezado
 \textbf{Elemento} & \textbf{Definición} \\
 \midrule
-Estado del ambiente & $s=(f,c,\theta,o_1,\dots,o_5)$: posición y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Inicio: $(0,0)$ mirando al norte, obstáculos al azar. Terminales: $\META$ (llega a $(7,7)$) y $\COL$ (choca); en ambos el episodio termina y el ambiente se reinicia en $(0,0)$ con obstáculos nuevos. Sin límite de pasos \\
-Observación del agente & $(f,c,\theta)$: el agente es ciego, sin sensores; no ve los obstáculos y solo se entera chocando. Es la clave de la Q-tabla: 256 filas por 3 acciones \\
-Acciones & $\IZQ$ y $\DER$ (girar $90^\circ$; siempre aplicables) y $\AV$ (a la casilla de enfrente; solo si existe) \\
-Dinámica & Aleatoria: cada obstáculo se queda o pasa a una vecina al azar, con igual probabilidad (nunca a la salida ni a la meta, ni encima de otro), al mismo tiempo que el agente. Hay colisión si comparten casilla o se cruzan, también mientras el agente gira \\
-Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y cada giro; $-10$ por avanzar contra la pared (no ocurre con la máscara $A(s)$). $\gamma=\GammaF$ \\
+Estado del ambiente & $s=(f,c,\theta,o_1,\dots,o_5)$: fila, columna y orientación del agente ($\theta\in\{\mathrm{N,E,S,O}\}$) y posiciones de los cinco obstáculos. Estado inicial: agente en $(0,0)$ orientado al norte y obstáculos en posiciones aleatorias. Estados terminales: $\META$ (llegada a $(7,7)$) y $\COL$ (colisión); al alcanzar cualquiera de ellos el episodio termina y el ambiente se reinicia. No hay límite de pasos \\
+Observación del agente & $x=(f,c,\theta)$. El agente no tiene sensores y no observa los obstáculos; solo los detecta al chocar. La Q-tabla se indexa por esta observación (256 combinaciones y 3 acciones) \\
+Acciones & $\IZQ$ y $\DER$ (giros de $90^\circ$, siempre disponibles) y $\AV$ (avanzar a la casilla de enfrente, disponible solo si esa casilla existe) \\
+Dinámica & Estocástica: en cada paso, y al mismo tiempo que el agente, cada obstáculo permanece en su casilla o se mueve a una vecina con igual probabilidad, sin entrar en la salida, en la meta ni en una casilla ocupada. Hay colisión si el agente y un obstáculo comparten casilla o intercambian posiciones, incluso mientras el agente gira \\
+Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por paso o giro; $-10$ por avanzar contra una pared (no ocurre al aplicar la máscara $A(s)$). Factor de descuento $\gamma=\GammaF$ \\
 \bottomrule
 \end{tabularx}
 \caption{Resumen del MDP.}
@@ -132,52 +115,61 @@ Recompensa & $+100$ al llegar a $(7,7)$; $-100$ al chocar; $-1$ por cada paso y 
 % =====================================================================
 \section{Implementación}
 
-El código está en el repositorio \href{https://github.com/panamiguell/rl-warehouse-agent}{panamiguell/rl-warehouse-agent}:
+El código se encuentra en el repositorio
+\href{https://github.com/panamiguell/rl-warehouse-agent}{panamiguell/rl-warehouse-agent} y se organiza en los
+siguientes módulos:
 
 \begin{itemize}
-  \item \code{src/rl\_gridworld/env.py}: el ambiente, compatible con Gymnasium. \code{reset} ubica al agente y
-    los obstáculos; \code{step} aplica la acción, mueve los obstáculos, detecta colisiones y devuelve la
-    recompensa; \code{action\_mask} da $A(s)$; \code{observe} entrega $(f,c,\theta)$.
-  \item \code{src/rl\_gridworld/agent.py}: los agentes tabulares (Q-learning y SARSA) y la memoria del agente.
-    \code{TabularAgent.save(ruta)} guarda la Q-tabla con sus hiperparámetros en un archivo \code{.npz}, y
-    \code{TabularAgent.load(ruta)} la carga en un agente listo para actuar. La Q-tabla también se exporta
-    legible en CSV: una fila por estado y una columna por acción.
-  \item \code{src/rl\_gridworld/baselines.py}: reglas fijas de referencia que, como el agente, no ven los
-    obstáculos. La \emph{aleatoria} hace lo mismo que el agente antes de entrenar. La regla \emph{por el borde}
-    va hacia la derecha por la fila 0 y luego hacia abajo por la columna 7. La regla \emph{escalera} alterna
-    derecha y abajo por la diagonal. Las dos últimas son caminos de longitud mínima (14 avances).
-  \item \code{experiments/cuarto\_8x8/}: entrenamiento y evaluación (\code{train.py}), video (\code{demo.py})
-    y cifras de este reporte (\code{report\_numbers.py}).
-  \item \code{tests/test\_gridworld.py}: 18 pruebas automáticas, entre ellas cada tripla $(s,a,s')$ del
-    documento de definición, que el agente no ve los obstáculos y el guardar/cargar de la Q-tabla.
+  \item \code{src/rl\_gridworld/env.py} implementa el ambiente con la interfaz de Gymnasium. El método
+    \code{reset} ubica al agente y a los obstáculos; \code{step} aplica la acción, mueve los obstáculos, detecta
+    las colisiones y entrega la recompensa; \code{action\_mask} calcula $A(s)$ y \code{observe} retorna
+    $(f,c,\theta)$.
+  \item \code{src/rl\_gridworld/agent.py} contiene los agentes tabulares de Q-learning y SARSA. El método
+    \code{TabularAgent.save} guarda la Q-tabla y sus hiperparámetros en un archivo \code{.npz}, y
+    \code{TabularAgent.load} la carga en un agente listo para actuar. La Q-tabla también se exporta en formato
+    CSV, con una fila por estado y una columna por acción.
+  \item \code{src/rl\_gridworld/baselines.py} define políticas de referencia que, al igual que el agente, no
+    observan los obstáculos: una política aleatoria, equivalente al agente antes de entrenar; una regla que
+    recorre la fila 0 y luego la columna 7 (\emph{por el borde}), y una regla que alterna movimientos hacia el
+    este y hacia el sur por la diagonal (\emph{escalera}). Las dos últimas son caminos de longitud mínima, con
+    14 avances.
+  \item En \code{experiments/cuarto\_8x8/} se encuentran los scripts de búsqueda de hiperparámetros
+    (\code{grid\_search.py}), entrenamiento y evaluación (\code{train.py}), generación del video
+    (\code{demo.py}) y generación de las cifras de este informe (\code{report\_numbers.py}).
+  \item \code{tests/test\_gridworld.py} contiene 18 pruebas automáticas. Entre ellas se verifican las triplas
+    $(s,a,s')$ del documento de definición, que la observación no contiene información de los obstáculos y que
+    la Q-tabla se recupera correctamente al guardarla y cargarla.
 \end{itemize}
 
-\textbf{Actualizaciones.} Con $\delta = r + \gamma\,\hat{Q}(x') - Q(x,a)$ y $Q(x,a)\leftarrow Q(x,a)+\alpha_t\,\delta$,
-Q-learning usa $\hat{Q}(x')=\max_{a'\in A(x')}Q(x',a')$ y SARSA usa $\hat{Q}(x')=Q(x',a')$ con la acción que
-realmente toma (Sutton y Barto, 2018, secs.~6.4 y~6.5). En $\META$ y $\COL$, $\hat{Q}(x')=0$. Como el agente no ve los obstáculos, la misma acción en la
-misma casilla a veces termina en choque y a veces no: las recompensas son muy ruidosas. Por eso probamos,
-además de una $\alpha$ fija, una tasa que disminuye con las visitas a cada par,
-$\alpha_t(x,a)=\max(0{,}01,\ N(x,a)^{-\omega})$. Los valores de $\gamma$, $\alpha$ y $\varepsilon$ se eligieron
-con la búsqueda de la sección~\ref{sec:grid}; el cuadro~\ref{tab:hiper} muestra los elegidos.
+Ambos algoritmos usan el error temporal $\delta = r + \gamma\,\hat{Q}(x') - Q(x,a)$ y la actualización
+$Q(x,a)\leftarrow Q(x,a)+\alpha_t\,\delta$. En Q-learning, $\hat{Q}(x')=\max_{a'\in A(x')}Q(x',a')$; en SARSA,
+$\hat{Q}(x')=Q(x',a')$, donde $a'$ es la acción que el agente efectivamente ejecuta (Sutton y Barto, 2018,
+secs.~6.4 y~6.5). En los estados terminales $\hat{Q}(x')=0$. Dado que el agente no observa los obstáculos, una
+misma acción en una misma casilla puede terminar o no en colisión, lo que introduce una varianza alta en las
+recompensas. Por esta razón evaluamos, además de una tasa de aprendizaje fija, una tasa que decrece con el número
+de visitas a cada par estado-acción, $\alpha_t(x,a)=\max(0{,}01,\ N(x,a)^{-\omega})$. Los valores de $\gamma$,
+$\alpha$ y $\varepsilon$ se seleccionaron con la búsqueda descrita en la sección~\ref{sec:grid}; el
+cuadro~\ref{tab:hiper} presenta los valores finales.
 
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{5.4cm}L@{}}
 \toprule
+\encabezado
 \textbf{Parámetro} & \textbf{Valor} \\
 \midrule
 Episodios de entrenamiento & \Episodios{} por algoritmo \\
 Tasa de aprendizaje & $\alpha_t(x,a)=\max(\AlphaMin,\ N(x,a)^{-\AlphaPot})$ \\
-Descuento $\gamma$ & \GammaF{} \\
-Exploración $\varepsilon$ & De \EpsIni{} a \EpsMin{}, decaimiento geométrico hasta el 80\,\% del entrenamiento \\
+Factor de descuento $\gamma$ & \GammaF{} \\
+Exploración $\varepsilon$-greedy & De \EpsIni{} a \EpsMin{}, con decaimiento geométrico hasta el 80\,\% del entrenamiento \\
 Inicialización de la Q-tabla & $Q=0$ \\
-Evaluación & Política greedy (sin exploración) \\
-Semillas & Entrenamiento, validación y prueba disjuntas \\
-Q-tabla entregada & La del mejor punto de control en validación (\TurnosValidacion{} episodios cada 5\,000): episodio \QLCkpt{} \\
-Evaluación final & \TurnosPrueba{} episodios de prueba, los mismos para agentes y reglas \\
+Política de evaluación & Greedy, sin exploración \\
+Semillas & Conjuntos disjuntos para entrenamiento, validación y prueba \\
+Q-tabla entregada & Mejor punto de control en validación (\TurnosValidacion{} episodios cada 5\,000): episodio \QLCkpt{} \\
+Evaluación final & \TurnosPrueba{} episodios de prueba, comunes a agentes y reglas \\
 \bottomrule
 \end{tabularx}
-\caption{Hiperparámetros elegidos con la búsqueda de la sección~\ref{sec:grid} y protocolo.}
+\caption{Hiperparámetros seleccionados y protocolo de evaluación.}
 \label{tab:hiper}
 \end{table}
 
@@ -185,100 +177,109 @@ Evaluación final & \TurnosPrueba{} episodios de prueba, los mismos para agentes
 \section{Búsqueda de hiperparámetros}
 \label{sec:grid}
 
-Exploramos un grid de hiperparámetros con \code{experiments/cuarto\_8x8/grid\_search.py}: \GridTotal{}
-combinaciones, cada una entrenada \Episodios{} episodios, más \GridConfirmacion{} corridas de confirmación con
-otras semillas. Para no elegir con los datos con los que se reporta, la búsqueda usa solo episodios de
-\emph{validación}; los de prueba se usan una sola vez, con la configuración elegida. Para cada combinación se
-guarda el mejor punto de control (500 episodios de validación cada 5\,000 de entrenamiento) y se vuelve a evaluar
-en 2\,000 episodios de validación nuevos, para no elegir por la suerte de los primeros 500.
+La búsqueda se realizó con el script \code{grid\_search.py} y comprendió \GridTotal{} combinaciones, cada una entrenada durante \Episodios{} episodios, más \GridConfirmacion{} corridas adicionales de
+confirmación con otras semillas. Para que la selección no dependa de los datos con los que se reportan los
+resultados, la búsqueda utiliza únicamente episodios de validación; los episodios de prueba se emplean una sola
+vez, con la configuración final. En cada combinación se conserva el mejor punto de control (500 episodios de
+validación cada 5\,000 episodios de entrenamiento) y ese punto se reevalúa sobre 2\,000 episodios de validación
+distintos, con el fin de reducir el efecto del azar en la selección.
 
-\textbf{Hipótesis.} Antes de correr la búsqueda escribimos qué esperábamos (están en el código del script):
-\begin{itemize}
-  \item \textbf{H1, $\gamma$ bajo.} Con $\gamma=0{,}90$ o $0{,}95$ el agente se queda girando en la salida, que es
-    segura: girar sin fin vale $-1/(1-\gamma)=-10$ o $-20$, más que intentar llegar con cerca de 65\,\% de
-    choques. Esta hipótesis venía de una primera versión con $\gamma=0{,}95$ en la que vimos ese comportamiento.
-  \item \textbf{H2, $\gamma$ alto.} Con $\gamma=0{,}999$ también sale (girar sin fin vale $-1\,000$), pero como los
-    valores son más grandes y ruidosos, aprende igual o un poco peor que con $0{,}99$.
-  \item \textbf{H3, tasa de aprendizaje.} Con $\alpha$ fija los valores oscilan por el ruido de los choques y la
-    política es menos estable; la tasa por visitas converge mejor.
-  \item \textbf{H4, exploración.} El $\varepsilon$ mínimo casi no cambia la ruta final, porque se evalúa la política
-    greedy.
-  \item \textbf{H5, algoritmo.} Q-learning y SARSA llegan a resultados parecidos: sin ver los obstáculos, lo único
-    que se puede aprender es la ruta.
+Antes de ejecutar la búsqueda registramos en el propio script las siguientes hipótesis:
+\begin{itemize}[leftmargin=2.6em]
+  \item[H1.] Con $\gamma=0{,}90$ o $\gamma=0{,}95$ el agente aprenderá a permanecer girando en la casilla de
+    salida, donde no puede ser alcanzado. El retorno de esa conducta es $-1/(1-\gamma)$, es decir, $-10$ o
+    $-20$, valor superior al retorno esperado de intentar el recorrido con una probabilidad de colisión cercana
+    al 65\,\%. Esta hipótesis surgió de una primera versión del entrenamiento con $\gamma=0{,}95$ en la que
+    observamos dicho comportamiento.
+  \item[H2.] Con $\gamma=0{,}999$ el agente también aprenderá a salir, pues permanecer en la salida tiene un
+    retorno de $-1\,000$; sin embargo, la mayor magnitud y varianza de los valores podría producir un desempeño
+    igual o ligeramente inferior al obtenido con $\gamma=0{,}99$.
+  \item[H3.] Con una tasa de aprendizaje fija, la varianza de las recompensas hará que los valores oscilen y que
+    la política sea menos estable entre puntos de control que con una tasa decreciente por visitas.
+  \item[H4.] El valor mínimo de $\varepsilon$ tendrá un efecto reducido sobre la ruta final, dado que la
+    evaluación se realiza con la política greedy.
+  \item[H5.] Q-learning y SARSA obtendrán resultados similares, porque sin información sobre los obstáculos el
+    único aspecto que el agente puede aprender es la ruta.
 \end{itemize}
 
-\subsection{Etapa 1: el descuento \texorpdfstring{$\gamma$}{gamma}}
+\subsection{Etapa 1: factor de descuento}
 
-Probamos $\gamma\in\{0{,}90;\ 0{,}95;\ 0{,}99\}$ con los dos algoritmos ($\omega=0{,}7$ y $\varepsilon$ mínimo
-$0{,}05$). Con $\gamma$ bajo el agente gira en la salida hasta el corte de seguridad, así que en esta etapa el
-corte de entrenamiento se bajó a 200 pasos para que el cómputo cupiera. No cambia lo que se aprende: en el corte
-no se trata el estado como terminal y se sigue estimando su valor.
+En la primera etapa evaluamos $\gamma\in\{0{,}90;\ 0{,}95;\ 0{,}99\}$ con ambos algoritmos, manteniendo
+$\omega=0{,}7$ y un $\varepsilon$ mínimo de $0{,}05$. Con valores bajos de $\gamma$ el agente permanece en la
+salida hasta alcanzar el corte de seguridad del simulador, lo que hace muy costosa cada corrida. Por esta razón,
+en esta etapa el corte de los episodios de entrenamiento se redujo a 200 pasos. Esta modificación no altera el
+objetivo del aprendizaje, ya que al llegar al corte el estado no se trata como terminal y se continúa estimando
+su valor.
 
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}lcrLr@{}}
 \toprule
-\textbf{Algoritmo} & $\boldsymbol{\gamma}$ & \textbf{Llega (\%)} & \textbf{Qué aprende} & \textbf{Pasos por episodio} \\
+\encabezado
+\textbf{Algoritmo} & $\boldsymbol{\gamma}$ & \textbf{Llegadas (\%)} & \textbf{Política aprendida} & \textbf{Pasos por episodio} \\
 \midrule
 \filas{generado/tabla_gamma.tex}
 \bottomrule
 \end{tabularx}
-\caption{Etapa 1. ``Llega'': episodios de validación que llegan a la meta con el mejor punto de control. ``Pasos
-por episodio'': promedio durante el entrenamiento.}
+\caption{Etapa 1. Llegadas: porcentaje de episodios de validación que alcanzan la meta con el mejor punto de
+control. Pasos por episodio: promedio durante el entrenamiento.}
 \label{tab:gamma}
 \end{table}
 
-\subsection{Etapa 2: grid factorial}
+\subsection{Etapa 2: diseño factorial}
 
-Con $\gamma$ ya en la zona en que el agente sale, probamos todas las combinaciones de algoritmo (2), $\gamma\in\{0{,}99;\
-0{,}999\}$ (2), tasa de aprendizaje (4: $\alpha$ fija $0{,}1$, o por visitas con $\omega\in\{0{,}5;\ 0{,}7;\
-0{,}9\}$) y $\varepsilon$ mínimo $\in\{0{,}01;\ 0{,}05;\ 0{,}10\}$ (3): \GridEtapaDos{} combinaciones con el
-ambiente oficial.
+Una vez identificado el rango de $\gamma$ en el que el agente abandona la salida, evaluamos todas las
+combinaciones de algoritmo (2), $\gamma\in\{0{,}99;\ 0{,}999\}$ (2), tasa de aprendizaje (4: fija en $0{,}1$, o
+decreciente con $\omega\in\{0{,}5;\ 0{,}7;\ 0{,}9\}$) y $\varepsilon$ mínimo $\in\{0{,}01;\ 0{,}05;\ 0{,}10\}$ (3),
+para un total de \GridEtapaDos{} combinaciones con la configuración oficial del ambiente.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.86\textwidth]{grid.png}
-\caption{Etapa 2: porcentaje de episodios de validación que llegan a la meta en cada combinación.}
+\caption{Etapa 2. Porcentaje de episodios de validación que alcanzan la meta en cada combinación.}
 \label{fig:grid}
 \end{figure}
 
-Las \GridBorde{} de las \GridEtapaDos{} combinaciones aprenden una ruta por el borde, y las llegadas en validación
-solo van de \GridMin\,\% a \GridMax\,\%. Esa diferencia no viene de los hiperparámetros sino de cuál de las dos
-rutas por el borde aprende cada corrida: \GridFilaCero{} aprendieron la de la fila 0 y la columna 7
-(\GridValFilaCero\,\% en validación) y \GridColumnaCero{} la de la columna 0 y la fila 7 (\GridValColumnaCero\,\%).
-Con 2\,000 episodios, una diferencia así está dentro del intervalo de confianza ($\pm$2 puntos). Donde sí se nota
-la tasa de aprendizaje es en la estabilidad: con $\alpha$ fija, en promedio \GridCerosFija{} de los 10 puntos de
-control quedan en 0\,\% de llegadas y el mejor punto llega hacia el episodio \GridEpisodioFija{}; con la tasa por
-visitas, \GridCerosVisitas{} puntos en 0\,\% y el mejor hacia el episodio \GridEpisodioVisitas{}. El promedio de
-llegadas en validación es casi el mismo para Q-learning (\GridValQL\,\%) y SARSA (\GridValSARSA\,\%), para
-$\gamma=0{,}99$ (\GridValGammaNN\,\%) y $0{,}999$ (\GridValGammaNNN\,\%), y para los tres $\varepsilon$ mínimos
-(\GridValEpsUno\,\%, \GridValEpsCinco\,\% y \GridValEpsDiez\,\%).
+Las \GridBorde{} combinaciones convergieron a una ruta por el borde del cuarto, con tasas de llegada en validación
+entre \GridMin\,\% y \GridMax\,\%. La variación observada se explica por la ruta que fijó cada corrida y no por los
+hiperparámetros: \GridFilaCero{} corridas aprendieron la ruta por la fila 0 y la columna 7
+(\GridValFilaCero\,\% en validación) y \GridColumnaCero{} la ruta por la columna 0 y la fila 7
+(\GridValColumnaCero\,\%). Con 2\,000 episodios, una diferencia de esa magnitud se encuentra dentro del intervalo
+de confianza del 95\,\% ($\pm$2 puntos). La tasa de aprendizaje sí afecta la estabilidad del entrenamiento: con
+$\alpha$ fija, en promedio \GridCerosFija{} de los 10 puntos de control registran 0\,\% de llegadas y el mejor
+punto se alcanza alrededor del episodio \GridEpisodioFija; con la tasa decreciente, estos valores son
+\GridCerosVisitas{} y \GridEpisodioVisitas, respectivamente. Las tasas promedio de llegada son prácticamente
+iguales entre Q-learning (\GridValQL\,\%) y SARSA (\GridValSARSA\,\%), entre $\gamma=0{,}99$ (\GridValGammaNN\,\%)
+y $\gamma=0{,}999$ (\GridValGammaNNN\,\%), y entre los tres valores de $\varepsilon$ mínimo (\GridValEpsUno\,\%,
+\GridValEpsCinco\,\% y \GridValEpsDiez\,\%).
 
-\subsection{Confirmación con otras semillas y elección}
+\subsection{Confirmación y selección}
 
-Las cinco mejores combinaciones de la etapa 2 se repitieron con dos semillas de entrenamiento más. Gana la de
-mayor promedio en validación.
+Las cinco mejores combinaciones de la etapa 2 se repitieron con dos semillas de entrenamiento adicionales, y se
+seleccionó la de mayor promedio en validación.
 
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}lcccrrrrL@{}}
 \toprule
+\encabezado
 \textbf{Algoritmo} & $\boldsymbol{\gamma}$ & $\boldsymbol{\alpha}$ & $\boldsymbol{\varepsilon}$ \textbf{mín} & \textbf{Sem. 0} & \textbf{Sem. 1} & \textbf{Sem. 2} & \textbf{Prom.} & \textbf{Ruta aprendida} \\
 \midrule
 \filas{generado/tabla_confirmacion.tex}
 \bottomrule
 \end{tabularx}
-\caption{Confirmación: llegadas en validación (\%) con tres semillas de entrenamiento.}
+\caption{Confirmación: porcentaje de llegadas en validación con tres semillas de entrenamiento.}
 \label{tab:confirmacion}
 \end{table}
 
-La configuración elegida es \textbf{\SelAlg{} con $\gamma=\SelGamma$, tasa por visitas con $\omega=\SelOmega$ y
-$\varepsilon$ mínimo \SelEps} (\SelVal\,\% en validación). Empata en promedio con la misma configuración con
-$\gamma=0{,}99$; el desempate por estabilidad eligió $0{,}999$. La conclusión importante del grid es otra: dentro de
-la zona en que el agente sale de la salida, los hiperparámetros casi no cambian el resultado. La misma
-configuración aprende una u otra ruta según la semilla, y las dos rutas llegan a la meta en proporciones que no
-se pueden distinguir con los datos. Con este agente ciego, lo que se puede aprender es la ruta, y todas las
-configuraciones razonables encuentran una ruta por el borde.
+La configuración seleccionada fue \textbf{\SelAlg{} con $\gamma=\SelGamma$, tasa decreciente con
+$\omega=\SelOmega$ y $\varepsilon$ mínimo de \SelEps} (\SelVal\,\% en validación). Esta configuración obtuvo el
+mismo promedio que su equivalente con $\gamma=0{,}99$, y el criterio de desempate por estabilidad favoreció
+$\gamma=0{,}999$. En conjunto, los resultados indican que, una vez el agente aprende a abandonar la salida, los
+hiperparámetros evaluados tienen un efecto despreciable sobre el desempeño final. Una misma configuración puede
+aprender una u otra ruta por el borde según la semilla, y las tasas de llegada de ambas rutas no se distinguen
+estadísticamente. Para un agente sin percepción de los obstáculos, lo que determina el desempeño es la ruta, y
+todas las configuraciones razonables convergen a una ruta por el borde.
 
 % =====================================================================
 \section{Resultados}
@@ -288,141 +289,149 @@ configuraciones razonables encuentran una ruta por el borde.
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.78\textwidth]{curvas_aprendizaje.png}
-\caption{Porcentaje de episodios de validación que llegan a la meta durante el entrenamiento.}
+\caption{Porcentaje de episodios de validación que alcanzan la meta durante el entrenamiento.}
 \label{fig:curvas}
 \end{figure}
 
-Antes de entrenar, la Q-tabla está en ceros y el agente actúa al azar: casi nunca llega a la meta. En los
-primeros puntos de control, mientras explora mucho, la política greedy todavía queda girando en un mismo sitio
-(0\,\% de llegadas). Q-learning fija su ruta a los \QLCkpt{} episodios y SARSA a los \SARSACkpt{}; desde ahí la
-política greedy ya no cambia. Las dos curvas quedan a la altura de la regla por el borde: Q-learning con la ruta
-espejo de esa regla y SARSA con la misma ruta de la regla.
+Con la Q-tabla inicializada en cero, el agente actúa de forma prácticamente aleatoria y casi nunca alcanza la
+meta. En los primeros puntos de control, mientras la exploración es alta, la política greedy todavía puede quedar
+girando en una misma casilla, lo que se refleja en tasas de llegada de 0\,\%. Q-learning estabiliza su ruta a
+partir del episodio \QLCkpt{} y SARSA a partir del episodio \SARSACkpt; desde ese punto la política greedy no
+vuelve a cambiar. Ambas curvas se ubican al nivel de la regla por el borde: SARSA aprendió exactamente esa ruta y
+Q-learning su ruta simétrica.
 
 \subsection{Evaluación en prueba}
 
 \begin{table}[H]
 \centering\small
-\begin{tabularx}{\textwidth}{@{}Lrrrrr@{}}
+\begin{tabularx}{\textwidth}{@{}P{3.3cm}RRRRR@{}}
 \toprule
-\textbf{Política} & \textbf{Llega (\%)} & \textbf{Choca (\%)} & \textbf{Sin terminar (\%)} & \textbf{Pasos si llega} & \textbf{Recompensa} \\
+\encabezado
+\textbf{Política} & \textbf{Llegadas (\%)} & \textbf{Colisiones (\%)} & \textbf{Sin terminar (\%)} & \textbf{Pasos por llegada} & \textbf{Recompensa} \\
 \midrule
 \filas{generado/tabla_resultados.tex}
 \bottomrule
 \end{tabularx}
-\caption{Resultados en \TurnosPrueba{} episodios de prueba ($\pm$: intervalo de confianza del 95\,\%).
-``Sin terminar'' son los episodios que llegarían al corte de seguridad de 1\,000 pasos.}
+\caption{Resultados en \TurnosPrueba{} episodios de prueba ($\pm$: intervalo de confianza del 95\,\%). La
+columna ``Sin terminar'' corresponde a episodios que alcanzarían el corte de seguridad de 1\,000 pasos.}
 \label{tab:resultados}
 \end{table}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.78\textwidth]{comparacion.png}
-\caption{Cómo termina cada episodio de prueba.}
+\caption{Desenlace de los episodios de prueba para cada política.}
 \end{figure}
 
-Todas las políticas se evaluaron en los mismos episodios: misma posición inicial y mismos movimientos
-aleatorios de los obstáculos, así que las diferencias se miden episodio a episodio. Frente al agente sin
-entrenar, Q-learning llega a la meta en \DifQLRand{} $\pm$ \DifQLRandci{} puntos porcentuales más de episodios, y
-supera a la escalera por el centro en \DifQLEsc{} $\pm$ \DifQLEscci{} puntos. Frente a la regla por el borde la
-diferencia es de \DifQLBorde{} $\pm$ \DifQLBordeci{} puntos: no se distingue de cero. Q-learning toma la ruta
-espejo de esa regla y SARSA exactamente la misma, así que SARSA y la regla tienen el mismo resultado. Ningún
-episodio quedó sin terminar: el agente siempre avanza hacia la meta.
+Todas las políticas se evaluaron sobre los mismos episodios, con la misma configuración inicial y la misma
+secuencia de movimientos aleatorios de los obstáculos, de modo que las diferencias se estiman de forma pareada.
+Frente al agente sin entrenar, Q-learning alcanza la meta en \DifQLRand{} $\pm$ \DifQLRandci{} puntos
+porcentuales más de episodios, y frente a la ruta en escalera la ventaja es de \DifQLEsc{} $\pm$ \DifQLEscci{}
+puntos. Respecto a la regla por el borde, la diferencia es de \DifQLBorde{} $\pm$ \DifQLBordeci{} puntos y no es
+estadísticamente distinta de cero; SARSA, que sigue exactamente esa ruta, obtiene el mismo resultado que la
+regla. Ningún episodio alcanzó el corte de seguridad, lo que confirma que la política aprendida siempre avanza
+hacia la meta.
 
-\subsection{Qué aprendió el agente: la ruta}
+\subsection{Política aprendida}
 \label{sec:ruta}
 
-Como el agente no ve los obstáculos, su política depende solo de dónde está y hacia dónde mira, así que es una
-ruta fija. La figura~\ref{fig:ruta} la muestra.
+Dado que el agente no observa los obstáculos, su política depende únicamente de la posición y la orientación, y
+por tanto corresponde a una ruta fija. La figura~\ref{fig:ruta} muestra las rutas aprendidas.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.46\textwidth]{ruta_aprendida.png}
-\caption{Rutas de la política greedy aprendida y de la regla en escalera.}
+\caption{Rutas de las políticas greedy aprendidas y de la regla en escalera.}
 \label{fig:ruta}
 \end{figure}
 
-Q-learning aprendió la secuencia \code{\RutaQL} (D: girar a la derecha, I: girar a la izquierda, A: avanzar):
-gira dos veces hasta mirar al sur, baja por la columna 0, gira hacia el este y recorre la fila 7. Son \PasosQL{}
-pasos con \GirosQL{} giros. SARSA aprendió la ruta espejo (\code{\RutaSARSA}): gira hacia el este, recorre la
-fila 0, gira hacia el sur y baja por la columna 7, con \PasosSARSA{} pasos y \GirosSARSA{} giros; es la misma
-ruta de la regla por el borde. Como el agente empieza mirando al norte, la ruta por la columna 0 necesita un giro
-más, y aun así las dos llegan en proporciones que no se distinguen. Que estas rutas sean mejores que la escalera,
-con el mismo número de avances, tiene dos explicaciones:
-\begin{itemize}
-  \item \textbf{Menos giros.} Cada giro es un paso más en el que un obstáculo puede llegar. La escalera necesita
-    14 giros y tarda 28 pasos; las rutas por el borde, 2 o 3 giros y 16 o 17 pasos.
-  \item \textbf{Menos vecinas.} Una casilla del borde tiene 3 vecinas (2 en las esquinas) desde las que un
-    obstáculo puede entrar; una casilla interior tiene 4.
-\end{itemize}
-De los choques de Q-learning, el \CausaAvanzando\,\% ocurre al avanzar hacia una casilla en la que entra o se
-queda un obstáculo, el \CausaCruce\,\% al cruzarse con uno y el \CausaGirando\,\% mientras gira. El
-\LugarUno\,\% ocurre en la \TramoUno, el \LugarEsquina\,\% en la esquina \Esquina{} y el \LugarDos\,\% en la
-\TramoDos.
+Q-learning aprendió la secuencia \code{\RutaQL}, donde D, I y A denotan girar a la derecha, girar a la izquierda
+y avanzar. El agente gira dos veces hasta quedar orientado al sur, desciende por la columna 0, gira hacia el este
+y recorre la fila 7, para un total de \PasosQL{} pasos y \GirosQL{} giros. SARSA aprendió la ruta simétrica
+(\code{\RutaSARSA}): gira hacia el este, recorre la fila 0, gira hacia el sur y desciende por la columna 7, con
+\PasosSARSA{} pasos y \GirosSARSA{} giros, igual que la regla por el borde. Como el agente inicia orientado al
+norte, la ruta por la columna 0 requiere un giro adicional; aun así, ambas rutas alcanzan la meta en proporciones
+indistinguibles.
 
-\subsection{La Q-tabla}
+La ventaja de las rutas por el borde frente a la escalera, que tiene el mismo número de avances, se explica por
+dos factores. El primero es el número de giros: cada giro añade un paso durante el cual un obstáculo puede
+alcanzar al agente, y la escalera requiere 14 giros y 28 pasos, frente a 2 o 3 giros y 16 o 17 pasos de las rutas
+por el borde. El segundo es la exposición de cada casilla: una casilla del borde tiene tres vecinas (dos en las
+esquinas) desde las cuales puede llegar un obstáculo, mientras que una casilla interior tiene cuatro.
+
+En cuanto a las colisiones de Q-learning, el \CausaAvanzando\,\% ocurre al avanzar hacia una casilla que un
+obstáculo ocupa o a la que se desplaza, el \CausaCruce\,\% al intercambiar posiciones con un obstáculo y el
+\CausaGirando\,\% durante un giro. Por ubicación, el \LugarUno\,\% ocurre en la \TramoUno, el \LugarEsquina\,\% en
+la esquina \Esquina{} y el \LugarDos\,\% en la \TramoDos.
+
+\subsection{Q-tabla}
 \label{sec:qtabla}
 
-La Q-tabla de Q-learning tiene \QLEstados{} de los 252 estados no terminales: el agente los visitó todos
-mientras exploraba. Se entrega completa en \code{results/cuarto\_8x8/models/q\_learning\_qtable.csv}. El
-cuadro~\ref{tab:qtabla} muestra algunas filas; en negrita, la acción que elige el agente.
+La Q-tabla de Q-learning contiene \QLEstados{} de los 252 estados no terminales, lo que indica que todos fueron
+visitados durante la exploración. La tabla completa se entrega en
+\code{results/cuarto\_8x8/models/q\_learning\_qtable.csv}. El cuadro~\ref{tab:qtabla} presenta un extracto; en
+negrita se indica la acción que elige el agente.
 
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{1.6cm}cRRR@{}}
 \toprule
+\encabezado
 $(f,c)$ & $\theta$ & $Q(\IZQ)$ & $Q(\DER)$ & $Q(\AV)$ \\
 \midrule
 \filas{generado/tabla_qtabla.tex}
 \bottomrule
 \end{tabularx}
-\caption{Extracto de la Q-tabla de Q-learning (n/a: acción no aplicable).}
+\caption{Extracto de la Q-tabla de Q-learning (n/a: acción no disponible).}
 \label{tab:qtabla}
 \end{table}
 
-Los valores reflejan la ruta. En $(0,0)$ mirando al norte solo se puede girar, y los dos giros valen casi lo
-mismo, porque por cualquiera de los dos lados se llega a mirar al sur en dos giros. Mirando al sur, en la columna
-0, lo mejor es avanzar. En la esquina $(7,0)$ mirando al sur, girar a la izquierda. En la fila 7 mirando al este,
-avanzar, y en $(7,6)$ ese avance vale exactamente $+100$. Los valores crecen a lo largo de la ruta, de
-\QSalida{} en la salida a $+100$ junto a la meta. En la salida son negativos porque el agente choca antes de
-llegar en cerca de dos de cada tres episodios; el valor es cercano a la recompensa media por episodio del
-cuadro~\ref{tab:resultados}. La última fila, $(3,3)$, es una casilla fuera de la ruta: el agente la visitó
-mientras exploraba, pero nunca pasa por ella con la política greedy.
+Los valores son consistentes con la ruta aprendida. En $(0,0)$ con orientación norte solo es posible girar, y
+ambos giros tienen valores casi idénticos porque cualquiera de ellos permite quedar orientado al sur en dos
+pasos. Con orientación sur en la columna 0 la mejor acción es avanzar; en la esquina $(7,0)$ con orientación sur,
+girar a la izquierda; en la fila 7 con orientación este, avanzar, y en $(7,6)$ esa acción tiene un valor de
+exactamente $+100$. Los valores aumentan a lo largo de la ruta, desde \QSalida{} en la salida hasta $+100$ junto a
+la meta. Son negativos al inicio porque el agente colisiona antes de llegar en aproximadamente dos de cada tres
+episodios, y el valor en la salida es cercano a la recompensa media por episodio del
+cuadro~\ref{tab:resultados}. La última fila corresponde a la casilla $(3,3)$, que está fuera de la ruta: el
+agente la visitó durante la exploración, pero la política greedy nunca pasa por ella.
 
 % =====================================================================
 \section{Comportamiento esperado y comportamiento observado}
 \label{sec:comportamiento}
 
-Para cada experimento escribimos antes de correrlo qué creíamos que iba a pasar, y lo comparamos con lo que
-ocurrió.
+El cuadro~\ref{tab:comportamiento} contrasta, para cada experimento, el comportamiento que anticipamos antes de
+ejecutarlo con el que efectivamente se observó.
 
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{3.3cm}LL@{}}
 \toprule
-\textbf{Experimento y condiciones} & \textbf{Lo que esperábamos} & \textbf{Lo que ocurrió} \\
+\encabezado
+\textbf{Experimento y condiciones} & \textbf{Comportamiento esperado} & \textbf{Comportamiento observado} \\
 \midrule
-H1. $\gamma=0{,}90$ y $0{,}95$ (cuadro~\ref{tab:gamma}) & Que el agente se quedara girando en la salida, porque
-girar sin fin vale $-10$ o $-20$, más que intentar llegar & \textbf{Se cumplió.} Con los dos algoritmos llega en
-el 0\,\% y su política greedy gira en $(0,0)$; durante el entrenamiento los episodios duran en promedio
-\GammaPasosA{} pasos, contra \GammaPasosC{} con $\gamma=0{,}99$ \\
-H2. $\gamma=0{,}999$ frente a $0{,}99$ (figura~\ref{fig:grid}) & Que también saliera, pero aprendiera igual o un
-poco peor por tener valores más grandes y ruidosos & \textbf{Se cumplió en parte.} Sale y aprende una ruta por el
-borde, pero no aprende peor: \GridValGammaNNN\,\% frente a \GridValGammaNN\,\% en validación, dentro del ruido \\
-H3. $\alpha$ fija $0{,}1$ frente a tasa por visitas & Que con $\alpha$ fija la política fuera menos estable &
-\textbf{Se cumplió.} Con $\alpha$ fija quedan en 0\,\% \GridCerosFija{} de 10 puntos de control y el mejor llega
-hacia el episodio \GridEpisodioFija; con la tasa por visitas, \GridCerosVisitas{} y \GridEpisodioVisitas. Al final
-las dos aprenden una ruta por el borde \\
-H4. $\varepsilon$ mínimo $0{,}01$, $0{,}05$ y $0{,}10$ & Que casi no cambiara la ruta final & \textbf{Se
-cumplió.} \GridValEpsUno\,\%, \GridValEpsCinco\,\% y \GridValEpsDiez\,\% en validación \\
-H5. Q-learning frente a SARSA & Resultados parecidos, porque sin ver los obstáculos solo se puede aprender la
-ruta & \textbf{Se cumplió.} \GridValQL\,\% y \GridValSARSA\,\% en el grid; \QLExito\,\% y \SARSAExito\,\% en
-prueba \\
-Agente final en prueba (sección~\ref{sec:ruta}) & Una ruta corta con pocos giros, sin avanzar nunca contra una
-pared, y cerca de un tercio de llegadas, porque los choques dependen de obstáculos que no ve & \textbf{Se
-cumplió.} Ruta por el borde de \PasosQL{} pasos y \GirosQL{} giros; llega en el \QLExito\,\%, choca en el
-\QLChoque\,\% y ningún episodio queda sin terminar \\
-Video (\VideoEpisodios{} episodios) & Cerca de un tercio de llegadas, como en prueba & Llegó en
-\VideoMeta{} (\VideoExito\,\%): más de lo esperado, por el azar de una muestra pequeña
+H1. $\gamma=0{,}90$ y $0{,}95$ (cuadro~\ref{tab:gamma}) & Permanencia en la salida, porque girar
+indefinidamente tiene un retorno de $-10$ o $-20$, superior al de intentar el recorrido & \textbf{Confirmado.}
+Ambos algoritmos obtienen 0\,\% de llegadas y su política greedy gira en $(0,0)$; durante el entrenamiento los
+episodios duran en promedio \GammaPasosA{} pasos, frente a \GammaPasosC{} con $\gamma=0{,}99$ \\
+H2. $\gamma=0{,}999$ frente a $0{,}99$ (figura~\ref{fig:grid}) & El agente sale de la casilla inicial, con un
+desempeño igual o ligeramente inferior por la mayor varianza de los valores & \textbf{Confirmado parcialmente.}
+El agente aprende una ruta por el borde, sin pérdida de desempeño: \GridValGammaNNN\,\% frente a
+\GridValGammaNN\,\% en validación \\
+H3. $\alpha$ fija ($0{,}1$) frente a tasa decreciente & Menor estabilidad de la política con $\alpha$ fija &
+\textbf{Confirmado.} Con $\alpha$ fija, \GridCerosFija{} de 10 puntos de control con 0\,\% de llegadas y mejor
+punto hacia el episodio \GridEpisodioFija; con la tasa decreciente, \GridCerosVisitas{} y \GridEpisodioVisitas.
+Ambas terminan en una ruta por el borde \\
+H4. $\varepsilon$ mínimo de $0{,}01$, $0{,}05$ y $0{,}10$ & Efecto reducido sobre la ruta final &
+\textbf{Confirmado.} \GridValEpsUno\,\%, \GridValEpsCinco\,\% y \GridValEpsDiez\,\% de llegadas en validación \\
+H5. Q-learning frente a SARSA & Desempeño similar, pues solo se puede aprender la ruta & \textbf{Confirmado.}
+\GridValQL\,\% y \GridValSARSA\,\% en la búsqueda; \QLExito\,\% y \SARSAExito\,\% en prueba \\
+Agente final en prueba (sección~\ref{sec:ruta}) & Ruta corta con pocos giros, sin avances contra las paredes y
+cerca de un tercio de llegadas, dado que las colisiones dependen de obstáculos no observados &
+\textbf{Confirmado.} Ruta por el borde de \PasosQL{} pasos y \GirosQL{} giros; \QLExito\,\% de llegadas,
+\QLChoque\,\% de colisiones y ningún episodio sin terminar \\
+Video (\VideoEpisodios{} episodios) & Cerca de un tercio de llegadas, como en prueba & \VideoMeta{} llegadas
+(\VideoExito\,\%), por encima de lo esperado debido a la variabilidad de una muestra pequeña
 (sección~\ref{sec:entregables}) \\
 \bottomrule
 \end{tabularx}
@@ -430,71 +439,75 @@ Video (\VideoEpisodios{} episodios) & Cerca de un tercio de llegadas, como en pr
 \label{tab:comportamiento}
 \end{table}
 
-\subsection{Comportamiento no esperado observado}
+\subsection{Comportamiento no esperado}
 
-\begin{itemize}
-  \item \textbf{El agente no salía de la salida.} En la primera versión usamos $\gamma=0{,}95$ sin pensar en este
-    efecto, y el agente aprendió a quedarse girando para siempre en $(0,0)$. Como los obstáculos no entran en la
-    salida y no hay límite de pasos, girar ahí no tiene riesgo, y con ese $\gamma$ vale más que intentar el
-    recorrido con cerca de 65\,\% de choques. Era la política correcta para esas recompensas, pero no la que
-    buscábamos. De ahí salió la hipótesis H1, que el grid confirmó para $\gamma=0{,}90$ y $0{,}95$ con los dos
-    algoritmos.
-  \item \textbf{La ruta depende de la semilla.} Esperábamos que cada configuración aprendiera siempre la misma
-    ruta. En cambio, la misma configuración aprende a veces la ruta por la fila 0 y a veces la de la columna 0
-    (cuadro~\ref{tab:confirmacion}). Las dos son igual de buenas, así que pequeñas diferencias en la exploración
-    deciden cuál fija el agente. Por eso en el agente final Q-learning y SARSA terminaron con rutas espejo.
-  \item \textbf{La política greedy gira en un mismo sitio al principio.} Mientras la Q-tabla tiene muchos
-    valores sin aprender (en cero), la acción de mayor valor puede ser girar, y en los primeros puntos de control
-    el agente greedy queda dando vueltas (0\,\% en la figura~\ref{fig:curvas}). Desaparece cuando el agente
-    aprende los valores de la ruta. Por eso se entrega la Q-tabla del mejor punto de control en validación.
-  \item \textbf{El video tuvo más llegadas que la prueba.} En los \VideoEpisodios{} episodios del video el agente
-    llega \VideoMeta{} veces (\VideoExito\,\%), frente al \QLExito\,\% en prueba. No es un cambio de comportamiento:
-    con \TurnosPrueba{} episodios a partir de las mismas semillas del video llega en el \VideoExitoLargo\,\%.
-  \item \textbf{Choques mientras gira.} Las reglas lo permiten, pero no lo habíamos pensado como causa
-    importante: es el \CausaGirando\,\% de los choques del agente final.
-\end{itemize}
+El primer comportamiento no esperado se presentó en la versión inicial del entrenamiento, en la que usamos
+$\gamma=0{,}95$ sin anticipar su efecto. El agente aprendió a permanecer indefinidamente en $(0,0)$ girando sobre
+sí mismo. Como los obstáculos no pueden entrar en la salida y no hay límite de pasos, esta conducta no tiene
+riesgo, y con ese factor de descuento su retorno supera al de intentar el recorrido. Se trata de la política
+óptima para esa especificación, aunque no corresponde al objetivo de la tarea. Este hallazgo dio origen a la
+hipótesis H1, que la búsqueda de hiperparámetros confirmó para $\gamma=0{,}90$ y $\gamma=0{,}95$ con ambos
+algoritmos.
+
+En segundo lugar, esperábamos que cada configuración convergiera siempre a la misma ruta. Sin embargo, una misma
+configuración aprende en algunas semillas la ruta por la fila 0 y en otras la ruta por la columna 0
+(cuadro~\ref{tab:confirmacion}). Como ambas rutas tienen un desempeño equivalente, pequeñas diferencias en la
+exploración determinan cuál de ellas se fija. Esto explica que, en el entrenamiento final, Q-learning y SARSA
+hayan aprendido rutas simétricas.
+
+En tercer lugar, en los primeros puntos de control la política greedy queda girando en una misma casilla y no
+alcanza la meta (figura~\ref{fig:curvas}). Mientras gran parte de la Q-tabla conserva su valor inicial de cero,
+un giro puede ser la acción de mayor valor estimado. El fenómeno desaparece cuando el agente aprende los valores
+de la ruta, y es una de las razones para entregar la Q-tabla del mejor punto de control en validación.
+
+Por último, en los \VideoEpisodios{} episodios del video el agente alcanza la meta \VideoMeta{} veces
+(\VideoExito\,\%), una proporción superior al \QLExito\,\% obtenido en prueba. No se trata de un cambio en el
+comportamiento: con \TurnosPrueba{} episodios generados a partir de las mismas semillas del video, la tasa de
+llegada es de \VideoExitoLargo\,\%. Tampoco habíamos considerado las colisiones durante los giros como una causa
+relevante, aunque las reglas las permiten; representan el \CausaGirando\,\% de las colisiones del agente final.
 
 \subsection{Limitaciones}
 
-\begin{itemize}
-  \item Sin ver los obstáculos, ninguna política puede esquivarlos: lo único que se puede aprender es la ruta
-    con menos riesgo esperado. Por eso el agente choca en cerca de dos de cada tres episodios.
-  \item El agente iguala a la mejor regla fija, pero no la supera: con la información disponible, la ruta por el
-    borde parece ser la mejor posible. No lo demostramos formalmente.
-\end{itemize}
+Al no percibir los obstáculos, ninguna política puede evitarlos de forma activa; el agente solo puede aprender
+la ruta de menor riesgo esperado, y por ello colisiona en cerca de dos de cada tres episodios. El agente iguala a
+la mejor regla fija sin superarla. Con la información disponible, la ruta por el borde parece ser la mejor
+posible, aunque no lo demostramos formalmente.
 
 % =====================================================================
 \section{Tiempo de ejecución y condiciones de hardware y software}
 
-La búsqueda de hiperparámetros se corrió con \code{grid\_search.py} y el entrenamiento y la evaluación finales con \code{experiments/cuarto\_8x8/train.py}, que registra los
-tiempos y el equipo en \code{results/cuarto\_8x8/logs/summary.json}. El código es Python de un solo hilo: usa
-un núcleo del procesador y no usa GPU. El cuadro~\ref{tab:tiempos} resume el equipo, el software y los tiempos.
+La búsqueda de hiperparámetros se ejecutó con \code{grid\_search.py}, y el entrenamiento y la evaluación finales
+con \code{experiments/cuarto\_8x8/train.py}, que registra los tiempos y las características del equipo en
+\code{results/cuarto\_8x8/logs/summary.json}. La implementación es Python de un solo hilo, por lo que cada
+proceso utiliza un núcleo del procesador y no requiere GPU. El cuadro~\ref{tab:tiempos} resume el equipo, el
+software y los tiempos de ejecución.
 
 \begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{4.3cm}L@{}}
 \toprule
+\encabezado
 \textbf{Elemento} & \textbf{Valor} \\
 \midrule
 Equipo & \CPU{} (\Nucleos{} núcleos virtuales), \RAM{} GB de RAM, sin GPU \\
 Sistema operativo & \SO{} (máquina virtual en la nube) \\
 Software & Python \VerPy{}, NumPy \VerNumpy{}, Gymnasium \VerGym{}, Matplotlib \VerMpl{}, PyYAML \VerYaml{} \\
 \midrule
-Entrenar Q-learning & \TQLEnt{} por \Episodios{} episodios (\TQLMsEp{} ms cada uno); \TQLEntVal{} con validaciones \\
-Entrenar SARSA & \TSARSAEnt{} por \Episodios{} episodios (\TSARSAMsEp{} ms cada uno); \TSARSAEntVal{} con validaciones \\
-Prueba & \TQLPrueba{} por agente (\TurnosPrueba{} episodios) \\
-Corrida completa de \code{train.py} & \TTotal{} (dos agentes, cinco políticas evaluadas y figuras) \\
-Búsqueda de hiperparámetros & \GridMinutos{} min (\GridTotal{} combinaciones y \GridConfirmacion{} corridas de confirmación, dos en paralelo) \\
-Generar el video & \TVideo{} (\VideoEpisodios{} episodios) \\
+Entrenamiento de Q-learning & \TQLEnt{} para \Episodios{} episodios (\TQLMsEp{} ms por episodio); \TQLEntVal{} con validaciones \\
+Entrenamiento de SARSA & \TSARSAEnt{} para \Episodios{} episodios (\TSARSAMsEp{} ms por episodio); \TSARSAEntVal{} con validaciones \\
+Evaluación en prueba & \TQLPrueba{} por agente (\TurnosPrueba{} episodios) \\
+Ejecución completa de \code{train.py} & \TTotal{} (dos agentes, cinco políticas evaluadas y figuras) \\
+Búsqueda de hiperparámetros & \GridMinutos{} min (\GridTotal{} combinaciones y \GridConfirmacion{} corridas de confirmación, en dos procesos paralelos) \\
+Generación del video & \TVideo{} (\VideoEpisodios{} episodios) \\
 \bottomrule
 \end{tabularx}
 \caption{Equipo, software y tiempos de ejecución.}
 \label{tab:tiempos}
 \end{table}
 
-El entrenamiento es rápido porque la Q-tabla es pequeña: \QLEstados{} estados por 3 acciones, y cada episodio
-dura pocos pasos. La corrida es determinista: con las mismas semillas,
-volver a entrenar reproduce exactamente la misma Q-tabla y los mismos resultados.
+El costo computacional es bajo porque la Q-tabla es pequeña (\QLEstados{} estados y 3 acciones) y los episodios
+son cortos. Además, la ejecución es determinista: con las mismas semillas, un nuevo entrenamiento reproduce
+exactamente la misma Q-tabla y los mismos resultados.
 
 % =====================================================================
 \section{Entregables y reproducción}
@@ -504,40 +517,44 @@ volver a entrenar reproduce exactamente la misma Q-tabla y los mismos resultados
 \centering\small
 \begin{tabularx}{\textwidth}{@{}P{7.6cm}L@{}}
 \toprule
+\encabezado
 \textbf{Archivo} & \textbf{Contenido} \\
 \midrule
-\code{results/cuarto\_8x8/figures/demo.mp4} & Video: \VideoEpisodios{} episodios del agente (\VideoDuracion{} min) con la Q-tabla cargada desde el archivo \\
-\code{results/cuarto\_8x8/models/q\_learning.npz} & Q-tabla del agente (se carga con \code{TabularAgent.load}) \\
-\code{results/cuarto\_8x8/models/*\_qtable.csv} & Q-tablas legibles de Q-learning y SARSA \\
-\code{results/cuarto\_8x8/logs/} & Registros de las pruebas: entrenamiento, curvas, cada episodio de prueba y resúmenes \\
-\code{src/rl\_gridworld/}, \code{experiments/cuarto\_8x8/}, \code{tests/} & Código completo \\
+\code{results/cuarto\_8x8/figures/demo.mp4} & Video de \VideoEpisodios{} episodios (\VideoDuracion{} min) con la Q-tabla cargada desde archivo \\
+\code{results/cuarto\_8x8/models/q\_learning.npz} & Q-tabla del agente, que se carga con \code{TabularAgent.load} \\
+\code{results/cuarto\_8x8/models/*\_qtable.csv} & Q-tablas de Q-learning y SARSA en formato legible \\
+\code{results/cuarto\_8x8/logs/} & Registros de entrenamiento, curvas, episodios de prueba y resúmenes \\
+\code{results/cuarto\_8x8/grid/} & Resultados de la búsqueda de hiperparámetros \\
+\code{src/rl\_gridworld/}, \code{experiments/cuarto\_8x8/}, \code{tests/} & Código fuente y pruebas \\
 \bottomrule
 \end{tabularx}
 \caption{Entregables.}
 \end{table}
 
-\textbf{El video.} Muestra \VideoEpisodios{} episodios seguidos, con semillas que no se usaron ni al entrenar ni
-al evaluar, y el agente actuando siempre con la acción de mayor valor en la Q-tabla cargada. Llega a la meta en
-\VideoMeta{} de los \VideoEpisodios{} (\VideoExito\,\%) y choca en los demás. Es distinto del \QLExito\,\% de la
-prueba porque \VideoEpisodios{} episodios son una muestra pequeña: con \TurnosPrueba{} episodios a partir de las
-mismas semillas del video, el agente llega en el \VideoExitoLargo\,\%, prácticamente lo mismo que en la prueba. No
-elegimos las semillas: el video es una muestra al azar del comportamiento real del agente.
+El video muestra \VideoEpisodios{} episodios consecutivos, generados con semillas que no se utilizaron en el
+entrenamiento ni en la evaluación, en los que el agente actúa siempre con la acción de mayor valor de la Q-tabla
+cargada. El agente alcanza la meta en \VideoMeta{} de ellos (\VideoExito\,\%) y colisiona en los demás. La
+diferencia con el \QLExito\,\% de prueba se debe al tamaño de la muestra: con \TurnosPrueba{} episodios a partir
+de las mismas semillas, la tasa de llegada es de \VideoExitoLargo\,\%, prácticamente igual a la de prueba. Las
+semillas del video no se seleccionaron, por lo que constituye una muestra aleatoria del comportamiento del agente.
+
+Los resultados pueden reproducirse con los siguientes comandos:
 
 {\small
 \begin{verbatim}
 conda env create -f environment.yml && conda activate rl-cuarto-8x8
 python -m pytest tests/test_gridworld.py          # 18 pruebas
-python experiments/cuarto_8x8/train.py            # entrena y evalúa
-python experiments/cuarto_8x8/demo.py             # carga la Q-tabla y graba el video
-python experiments/cuarto_8x8/demo.py --human     # lo muestra en una ventana
+python experiments/cuarto_8x8/grid_search.py      # búsqueda de hiperparámetros
+python experiments/cuarto_8x8/train.py            # entrenamiento y evaluación
+python experiments/cuarto_8x8/demo.py             # carga la Q-tabla y genera el video
+python experiments/cuarto_8x8/demo.py --human     # muestra la ejecución en una ventana
 \end{verbatim}
 }
-
-Todos los resultados son reproducibles con las semillas fijas del código.
 
 \section*{Referencias}
 
 Sutton, R. S. y Barto, A. G. (2018). \emph{Reinforcement Learning: An Introduction} (2.ª ed.). MIT Press.
+
 
 % =====================================================================
 \clearpage

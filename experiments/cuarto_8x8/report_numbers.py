@@ -69,7 +69,7 @@ def draw_routes(routes, path):
     ax.set_ylim(8.05, -0.05)
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.add_patch(Rectangle((7, 7), 1, 1, color="#7ED957", lw=0))
+    ax.add_patch(Rectangle((7, 7), 1, 1, color="#5CC585", lw=0))
     for k in range(9):
         ax.plot([0, 8], [k, k], color="#9CA3AF", lw=0.8)
         ax.plot([k, k], [0, 8], color="#9CA3AF", lw=0.8)
@@ -186,7 +186,7 @@ def main():
 
     def route_name(route):
         if route.endswith("..."):
-            return "gira sin salir" if set(route[:-3]) <= {"I", "D"} else "da vueltas"
+            return "permanece girando en la salida" if set(route[:-3]) <= {"I", "D"} else "no alcanza la meta"
         r, c, h = 0, 0, 0
         cells = []
         for a in route:
@@ -199,7 +199,7 @@ def main():
                 cells.append((r, c))
         turns = sum(a != "A" for a in route)
         side = "fila 0 y columna 7" if (0, 7) in cells else "columna 0 y fila 7" if (7, 0) in cells else "otra"
-        return f"borde por {side} ({len(route)} pasos, {turns} giros)"
+        return f"por el borde, {side} ({len(route)} pasos, {turns} giros)"
 
     def alpha_name(a):
         return "fija 0{,}1" if a == "fija" else f"$N^{{-{num(float(a), 1)}}}$"
@@ -218,13 +218,13 @@ def main():
         k = (entry["algorithm"], str(entry["gamma"]), str(entry["alpha"]), str(entry["eps_min"]))
         rows = sorted(groups[k], key=lambda r: int(r["seed"]))
         seeds = " & ".join(num(100 * float(r["validation"]), 1) for r in rows)
-        routes = "; ".join(sorted({route_name(r["route"]).split(" (")[0].replace("borde por ", "") for r in rows}))
+        routes = "; ".join(sorted({route_name(r["route"]).split(" (")[0].replace("por el borde, ", "") for r in rows}))
         name = f"{algo[k[0]]} & {num(float(k[1]), 3 if float(k[1]) > 0.99 else 2)} & {alpha_name(k[2])} & {num(float(k[3]), 2)}"
         table.append(f"{name} & {seeds} & \\textbf{{{num(100 * entry['validation_mean'], 1)}}} & {routes} \\\\")
     (OUT / "tabla_confirmacion.tex").write_text("\n".join(table) + "\n", encoding="utf-8")
 
     val2 = [float(r["validation"]) for r in stage2]
-    border = [r for r in stage2 if route_name(r["route"]).startswith("borde")]
+    border = [r for r in stage2 if route_name(r["route"]).startswith("por el borde")]
     macro("GridTotal", str(selection["combinations"]))
     macro("GridEtapaDos", str(len(stage2)))
     macro("GridConfirmacion", str(selection["confirmation_runs"]))
@@ -271,8 +271,8 @@ def main():
     macro("GirosQL", str(sum(a != AVANZAR for a in ql_actions)))
     macro("GirosSARSA", str(sum(a != AVANZAR for a in sa_actions)))
     draw_routes([(rule_route(escalera), "#9CA3AF", ":", 2, "Regla: escalera por el centro (28 pasos, 14 giros)", 0),
-                 (sa_cells, "#eb6834", "--", 2.2, f"SARSA ({len(sa_actions)} pasos)", 0.08),
-                 (ql_cells, "#2a78d6", "-", 2.6, f"Q-learning ({len(ql_actions)} pasos)", -0.08)],
+                 (sa_cells, "#2E9C8F", "--", 2.2, f"SARSA ({len(sa_actions)} pasos)", 0.08),
+                 (ql_cells, "#4453B8", "-", 2.6, f"Q-learning ({len(ql_actions)} pasos)", -0.08)],
                 FIGS / "ruta_aprendida.png")
     corner = (0, 7) if (0, 7) in ql_cells else (7, 0)
     first, second = ("fila 0", "columna 7") if corner == (0, 7) else ("columna 0", "fila 7")

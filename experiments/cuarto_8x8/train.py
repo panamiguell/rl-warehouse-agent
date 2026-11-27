@@ -193,7 +193,7 @@ def plot(curve, summary, figs):
 
     figs.mkdir(parents=True, exist_ok=True)
     ink, muted, grid = "#1F2933", "#6B7280", "#E5E7EB"
-    colors = {"q_learning": "#2a78d6", "sarsa": "#eb6834"}
+    colors = {"q_learning": "#4453B8", "sarsa": "#2E9C8F"}    # paleta MAIA
     fig, ax = plt.subplots(figsize=(9, 5), dpi=150)
     ends = {}
     for algorithm, color in colors.items():
@@ -230,7 +230,7 @@ def plot(curve, summary, figs):
     order = [k for k in ("q_learning", "sarsa", "borde", "escalera", "aleatoria") if k in summary]
     fig, ax = plt.subplots(figsize=(9, 3.8), dpi=150)
     y = np.arange(len(order))
-    parts = [("success", "Llega a la meta", "#1baf7a"), ("collision", "Choca", "#C0392B"),
+    parts = [("success", "Llega a la meta", "#3FA86B"), ("collision", "Choca", "#C0504D"),
              ("truncated", "Sin terminar (corte de seguridad)", "#9CA3AF")]
     left = np.zeros(len(order))
     for key, label, color in parts:

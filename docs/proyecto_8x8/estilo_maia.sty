@@ -1,0 +1,94 @@
+% =====================================================================
+%  Estilo de los documentos del proyecto: identidad de la Maestría en
+%  Inteligencia Artificial (MAIA) de la Universidad de los Andes.
+%  Uso: \usepackage{estilo_maia} después de xcolor, fancyhdr, titlesec,
+%  caption y graphicx; luego \portadamaia{título}{subtítulo}.
+% =====================================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{estilo_maia}[2026/11/26 Estilo MAIA]
+\RequirePackage{tikz}
+
+% Colores tomados del logo de la MAIA (degradado azul-violeta a verde)
+\definecolor{maiaazul}{HTML}{5A6ACE}
+\definecolor{maiaturquesa}{HTML}{5BB1A5}
+\definecolor{maiaverde}{HTML}{5CC585}
+\definecolor{maiaoscuro}{HTML}{2E3A8C}   % títulos y enlaces (azul MAIA oscurecido para contraste)
+\definecolor{maiatinta}{HTML}{1F2933}
+\definecolor{maiagris}{HTML}{5F6B7A}
+\colorlet{maiafondo}{maiaturquesa!13}
+\colorlet{azul}{maiaoscuro}             % compatibilidad con \color{azul}
+
+\hypersetup{linkcolor=maiaoscuro, urlcolor=maiaoscuro}
+
+% Franja con el degradado de la MAIA
+\newcommand{\franjamaia}[1][1.2pt]{%
+  \noindent\begin{tikzpicture}
+    \shade[left color=maiaazul, right color=maiaverde, middle color=maiaturquesa]
+      (0,0) rectangle (\linewidth,#1);
+  \end{tikzpicture}}
+
+% Encabezado y pie: escudo de los Andes y franja MAIA en cada página
+\newcommand{\cursomaia}{Aprendizaje por Refuerzo (MAIA)}
+\newcommand{\titulocorto}{Cuarto de 8\,\texttimes\,8 con obstáculos móviles}
+\setlength{\headheight}{37pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{%
+  \raisebox{-0.32\height}{\includegraphics[height=0.95cm]{escudo_uniandes}}\hspace{0.55em}%
+  \parbox[b]{7.5cm}{\footnotesize\color{maiatinta}\textbf{Universidad de los Andes}\\
+    \color{maiagris}Maestría en Inteligencia Artificial}}
+\fancyhead[R]{\parbox[b]{7cm}{\raggedleft\footnotesize\color{maiagris}\cursomaia\\
+  \color{maiaoscuro}\titulocorto}}
+\fancyfoot[L]{\footnotesize\color{maiagris}Muñoz Layton y Barrera Armendaris}
+\fancyfoot[R]{\footnotesize\color{maiaoscuro}\bfseries\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\headrule}{\vspace{-3pt}\franjamaia[0.9pt]}
+\fancypagestyle{portada}{%
+  \fancyhf{}
+  \fancyfoot[R]{\footnotesize\color{maiaoscuro}\bfseries\thepage}
+  \renewcommand{\headrule}{}}
+
+% Títulos de sección
+\titleformat{\section}{\Large\bfseries\color{maiaoscuro}}{\textcolor{maiaturquesa}{\thesection}}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{maiaoscuro}}{\textcolor{maiaturquesa}{\thesubsection}}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{maiaoscuro}}{\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\captionsetup{font=small, labelfont={bf,color=maiaoscuro}, labelsep=period}
+
+% Tablas: encabezado con fondo suave y reglas en azul oscuro
+\newcommand{\encabezado}{\rowcolor{maiafondo}}
+\arrayrulecolor{maiaoscuro!70}
+
+% Portada: logo MAIA, escudo de los Andes, franja y datos del trabajo
+\newcommand{\portadamaia}[2]{%
+  \thispagestyle{portada}
+  \vspace*{-1.2cm}
+  \noindent
+  \begin{minipage}[c]{0.5\textwidth}
+    \includegraphics[height=2.3cm]{logo_maia}
+  \end{minipage}%
+  \begin{minipage}[c]{0.5\textwidth}
+    \raggedleft
+    \begin{tabular}{@{}r@{\hspace{0.6em}}c@{}}
+      \parbox[c]{5.2cm}{\raggedleft\small\color{maiatinta}\textbf{Universidad de los Andes}\\
+        \color{maiagris}Maestría en Inteligencia Artificial\\Aprendizaje por Refuerzo}
+      & \raisebox{-0.5\height}{\includegraphics[height=1.9cm]{escudo_uniandes}}
+    \end{tabular}
+  \end{minipage}
+
+  \vspace{0.55cm}
+  \franjamaia[2.2pt]
+
+  \vspace{0.5cm}
+  {\noindent\LARGE\bfseries\color{maiaoscuro}#1\par}
+  \vspace{0.25cm}
+  {\noindent\large\color{maiatinta}#2\par}
+  \vspace{0.35cm}
+  {\noindent\small\color{maiagris}%
+    Miguel Ángel Muñoz Layton \quad\textperiodcentered\quad Daniel F. Barrera Armendaris\\[1pt]
+    Profesor: Nicolás Cardozo \quad\textperiodcentered\quad Noviembre de 2026\par}
+  \vspace{0.3cm}
+  \franjamaia[0.6pt]
+  \vspace{0.2cm}}
+
+\endinput
